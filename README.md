@@ -13,7 +13,7 @@ Os binários prontos (Linux, Windows, macOS Intel e macOS Apple Silicon)
 estão disponíveis na página de
 [**Releases**](https://github.com/J-AugustoManzano/peppe/releases).
 
-Basta baixar o arquivo correspondente ao seu sistema e rodar — não precisa
+Basta baixar o arquivo correspondente ao seu sistema e rodar, não precisa
 instalar nada além disso.
 
 ## Como usar
@@ -46,7 +46,7 @@ O executável fica em `target/release/peppe` (ou `peppe.exe` no Windows).
 ## Compilação automática
 
 Este repositório usa GitHub Actions para compilar automaticamente os
-binários das quatro plataformas a cada nova versão — veja
+binários das quatro plataformas a cada nova versão. Veja
 `.github/workflows/build.yml`.
 
 ## Autor
