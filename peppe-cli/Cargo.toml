@@ -1,0 +1,12 @@
+[package]
+name = "peppe-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Interpretador de linha de comando para a linguagem PEPPE"
+
+[[bin]]
+name = "peppe"
+path = "src/main.rs"
+
+[dependencies]
+peppe-core = { path = "../peppe-core" }

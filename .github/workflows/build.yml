@@ -1,0 +1,90 @@
+name: Compilar peppe (todas as plataformas)
+
+# Roda automaticamente a cada push/PR nas branches principais, e também
+# pode ser disparado manualmente pela aba "Actions" do GitHub (botão
+# "Run workflow"). Se um commit tiver uma tag "v1.2.3", também cria um
+# Release no GitHub já com os binários anexados.
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.nome }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: Linux (x86_64)
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: peppe
+            saida: peppe-linux-x86_64
+
+          - nome: Windows (x86_64)
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: peppe.exe
+            saida: peppe-windows-x86_64.exe
+
+          - nome: macOS Intel (x86_64)
+            os: macos-13
+            target: x86_64-apple-darwin
+            bin: peppe
+            saida: peppe-macos-intel
+
+          - nome: macOS Apple Silicon (arm64)
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bin: peppe
+            saida: peppe-macos-arm64
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar o Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Compilar (release)
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Preparar o binário para envio
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.saida }}"
+
+      - name: Publicar como artefato do workflow
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.saida }}
+          path: dist/${{ matrix.saida }}
+
+  # Só roda quando o push tem uma tag "v*" (ex.: v1.0.0) — junta os 4
+  # binários já compilados acima e cria um Release no GitHub com eles
+  # anexados, prontos para download.
+  release:
+    name: Criar Release no GitHub
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar todos os binários compilados
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Criar o Release e anexar os binários
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

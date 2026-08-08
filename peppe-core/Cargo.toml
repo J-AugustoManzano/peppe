@@ -1,0 +1,7 @@
+[package]
+name = "peppe-core"
+version = "0.1.0"
+edition = "2021"
+description = "Lexer, parser, verificador semântico e interpretador da linguagem PEPPE"
+
+[dependencies]
