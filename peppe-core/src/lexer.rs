@@ -4,16 +4,16 @@
 //! [`Token`]s. Implementa, em particular:
 //!
 //! - identificadores com acentuação (`início`, `não`, `ÁREA_CÍRCULO`...);
-//! - sinônimos de operadores: `<-`/`←` (✅ v0.9: '<-' é a forma canônica),
-//!   `^`/`↑` (idem, '^' canônico), `-`/`–` (en-dash, seção 5.2);
-//! - sequências de escape em literais de texto: `\n`, `\t`, `\"`, `\\` (seção 3);
+//! - sinônimos de operadores: `<-`/`←` ('<-' é a forma canônica),
+//!   `^`/`↑` (idem, '^' canônico), `-`/`–` (en-dash);
+//! - sequências de escape em literais de texto: `\n`, `\t`, `\"`, `\\`;
 //! - literal `caractere` entre aspas simples (`'S'`), distinto de `cadeia`
-//!   entre aspas duplas (`"S"`) mesmo com um único símbolo — seção 3;
+//!   entre aspas duplas (`"S"`) mesmo com um único símbolo ;
 //! - tokens "com pontos": `.e.` `.ou.` `.não./.nao.` `.xou.` `.v.` `.f.`
-//!   `.verdadeiro.` `.falso.` (seção 3 / 5.4), distinguindo-os do acesso a
+//!   `.verdadeiro.` `.falso.` (/ 5.4), distinguindo-os do acesso a
 //!   campo (`.`) e do operador de intervalo/escopo (`..`);
 //! - comentários de linha (`//`) e de bloco (`{ ... }`), sem aninhamento;
-//! - `;` tratado como separador ignorável em qualquer posição (seção 1.4).
+//! - `;` tratado como separador ignorável em qualquer posição.
 //!
 //! Variantes de palavras-chave sem acentuação (ex.: `inicio`, `funcao`,
 //! `nao`) são aceitas como sinônimos — conveniência para quem digita em
@@ -21,8 +21,7 @@
 
 use crate::token::{Token, TokenKind};
 
-/// Erro léxico, com posição (1-based) e mensagem didática em português,
-/// seguindo o formato da seção 15.3 da especificação.
+/// Erro léxico, com posição (1-based) e mensagem didática em português.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErroLexico {
     pub linha: usize,
@@ -129,7 +128,7 @@ impl Lexer {
         Ok(tokens)
     }
 
-    /// Avança sobre espaços em branco, `;` (separador ignorável — seção 1.4),
+    /// Avança sobre espaços em branco, `;` (separador ignorável ),
     /// comentários de linha (`//`) e comentários de bloco (`{ ... }`).
     fn pular_espacos_e_comentarios(&mut self) -> Result<(), ErroLexico> {
         loop {
@@ -203,9 +202,9 @@ impl Lexer {
 
     // -- Números ---------------------------------------------------------------
 
-    /// Lê um literal `inteiro` ou `real` (seção 3). Não trata sinal — números
+    /// Lê um literal `inteiro` ou `real`. Não trata sinal — números
     /// negativos são `-`/`–` (unário) aplicado a um literal, resolvido no parser
-    /// (seção 5.5).
+    ///.
     fn ler_numero(&mut self) -> Result<TokenKind, ErroLexico> {
         let linha = self.linha;
         let coluna = self.coluna;
@@ -256,7 +255,7 @@ impl Lexer {
     // -- Literais de texto -------------------------------------------------------
 
     /// Lê um literal `cadeia` entre aspas duplas, processando as
-    /// sequências de escape `\n`, `\t`, `\"` e `\\` (seção 3).
+    /// sequências de escape `\n`, `\t`, `\"` e `\\`.
     fn ler_texto(&mut self) -> Result<TokenKind, ErroLexico> {
         let linha_abertura = self.linha;
         let coluna_abertura = self.coluna;
@@ -301,7 +300,7 @@ impl Lexer {
     /// mesmos escapes de `Self::ler_texto` (`\n`, `\t`, `\'`, `\\`).
     /// Exige exatamente um caractere — `''` (vazio) e `'AB'` (mais de um)
     /// são erro léxico, já que `caractere` representa um único símbolo
-    /// (seção 3); para um literal de texto de tamanho arbitrário (mesmo
+    ///; para um literal de texto de tamanho arbitrário (mesmo
     /// que tenha um caractere só), use aspas duplas.
     fn ler_caractere(&mut self) -> Result<TokenKind, ErroLexico> {
         let linha_abertura = self.linha;
@@ -370,7 +369,7 @@ impl Lexer {
     /// Trata os três casos possíveis para um `.`:
     ///
     /// 1. Literal lógico/operador "com pontos": `.e.` `.ou.` `.não./.nao.`
-    ///    `.xou.` `.v.` `.f.` `.verdadeiro.` `.falso.` (seção 3/5.4);
+    ///    `.xou.` `.v.` `.f.` `.verdadeiro.` `.falso.`;
     /// 2. `..` — intervalo (`[1..10]`) ou resolução de escopo (`Classe..Método`);
     /// 3. `.` simples — acesso a campo (`REGISTRO.CAMPO`).
     ///
@@ -419,8 +418,8 @@ impl Lexer {
 
     fn ler_operador_ou_pontuacao(&mut self, c: char) -> Result<TokenKind, ErroLexico> {
         match c {
-            // Atribuição: '<-' (forma canônica, ✅ v0.9) ou ← (U+2190, sinônimo
-            // tipográfico — seção 5.1/5.7)
+            // Atribuição: '<-' (forma canônica) ou ← (U+2190, sinônimo
+            // tipográfico )
             '←' => {
                 self.advance();
                 Ok(TokenKind::Seta)
@@ -452,8 +451,8 @@ impl Lexer {
                     Ok(TokenKind::Maior)
                 }
             }
-            // Potenciação: '^' (forma canônica, ✅ v0.9) ou ↑ (U+2191, sinônimo
-            // tipográfico — seção 5.2/5.7)
+            // Potenciação: '^' (forma canônica) ou ↑ (U+2191, sinônimo
+            // tipográfico )
             '↑' | '^' => {
                 self.advance();
                 Ok(TokenKind::Potencia)
@@ -462,7 +461,7 @@ impl Lexer {
                 self.advance();
                 Ok(TokenKind::Mais)
             }
-            // Subtração: '-' ou '–' en-dash U+2013 (seção 5.2)
+            // Subtração: '-' ou '–' en-dash U+2013
             '-' | '–' => {
                 self.advance();
                 Ok(TokenKind::Menos)
@@ -509,7 +508,7 @@ impl Lexer {
 }
 
 /// Reconhece tokens "com pontos" — operadores lógicos e literais booleanos
-/// (seção 3/5.4). `palavra` já vem sem os pontos delimitadores.
+///. `palavra` já vem sem os pontos delimitadores.
 /// Aceita variantes sem acento (`nao`) como sinônimo de `não`.
 fn palavra_com_pontos(palavra: &str) -> Option<TokenKind> {
     match palavra.to_lowercase().as_str() {
@@ -525,13 +524,13 @@ fn palavra_com_pontos(palavra: &str) -> Option<TokenKind> {
     }
 }
 
-/// Tabela de palavras-chave reservadas (seção 11). A comparação é
-/// case-insensitive (seção 1.3); variantes sem acentuação são aceitas como
+/// Tabela de palavras-chave reservadas. A comparação é
+/// case-insensitive; variantes sem acentuação são aceitas como
 /// sinônimo de conveniência (ex.: `inicio` por `início`, `nao` por `não`,
 /// `funcao` por `função`).
 ///
-/// Identificadores pré-definidos (`p_pi`, `raizq`, etc. — seção 5.6) e
-/// funções de *casting* (`inteiro(x)` etc. — seção 10.5.1) **não** entram
+/// Identificadores pré-definidos (`p_pi`, `raizq`, etc. ) e
+/// funções de *casting* (`inteiro(x)` etc. ) **não** entram
 /// aqui: são identificadores normais, resolvidos como pré-definidos pelo
 /// verificador semântico/interpretador (permitindo *shadowing*).
 fn palavra_chave(s: &str) -> Option<TokenKind> {
@@ -692,8 +691,8 @@ mod tests {
 
     #[test]
     fn marcadores_ref_e_vlr_sao_reconhecidos() {
-        // ✅ v0.10: 'ref' (passagem por referência) e 'vlr' (passagem por
-        // valor, opcional/redundante) — seção 9.3.
+        // 'ref' (passagem por referência) e 'vlr' (passagem por
+        // valor, opcional/redundante) .
         assert_eq!(kinds("ref")[0], Ref);
         assert_eq!(kinds("vlr")[0], Vlr);
         // 'var' continua reservado à seção de declarações, não é mais
@@ -767,7 +766,7 @@ mod tests {
     #[test]
     fn texto_e_caractere_sao_tokens_distintos() {
         // "S" (aspas duplas) é Texto; 'S' (aspas simples) é Caractere —
-        // mesmo símbolo, tokens diferentes (seção 3).
+        // mesmo símbolo, tokens diferentes.
         let k = kinds(r#""S" 'S'"#);
         assert_eq!(k, vec![Texto("S".into()), Caractere('S')]);
     }

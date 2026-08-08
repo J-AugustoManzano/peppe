@@ -1,7 +1,8 @@
 //! Definição dos tokens da linguagem PEPPE.
 //!
 //! Cada `Token` carrega seu `TokenKind` e a posição (linha/coluna, 1-based)
-//! onde o token começa no código-fonte.
+//! onde o token começa no código-fonte — essencial para as mensagens de erro
+//! didáticas em português.
 
 use std::fmt;
 
@@ -15,25 +16,32 @@ pub enum TokenKind {
     /// Literal de `cadeia` entre aspas duplas (ex.: `"texto"`)
     Texto(String),
     /// Literal de `caractere` entre aspas simples (ex.: `'S'`) — exatamente
-    /// um caractere, nunca zero nem mais de um (seção 3).
+    /// um caractere, nunca zero nem mais de um.
     Caractere(char),
-    /// Literal lógico: `.v.` `.f.` `.verdadeiro.` `.falso.` (seção 3)
+    /// Literal lógico: `.v.` `.f.` `.verdadeiro.` `.falso.`
     Logico(bool),
     /// Identificador de usuário (variável, tipo, sub-rotina, etc.)
     Identificador(String),
 
-    // ---- Estrutura do programa (seção 1) ---------------------------------
+    // ---- Estrutura do programa ---------------------------------
     Programa,
     Const,
     Tipo,
     Var,
+    /// `ref` — marca passagem por referência em um grupo de parâmetros
+    /// (substitui `referencia`/`var`, mais curto e
+    /// fácil de digitar — mesmo espírito de `<-`/`^`).
     Ref,
+    /// `vlr` — marca passagem por valor em um grupo de parâmetros (seção
+    /// 9.3). Puramente **opcional/redundante**: omitir o
+    /// marcador já significa passagem por valor; `vlr` existe apenas para
+    /// quem preferir deixar isso explícito no código.
     Vlr,
     Objeto,
     Inicio,
     Fim,
 
-    // ---- Estruturas condicionais (seção 7) --------------------------------
+    // ---- Estruturas condicionais --------------------------------
     Se,
     Entao,
     Senao,
@@ -45,7 +53,7 @@ pub enum TokenKind {
     Faca,
     FimCaso,
 
-    // ---- Estruturas de repetição (seção 8) --------------------------------
+    // ---- Estruturas de repetição --------------------------------
     Enquanto,
     FimEnquanto,
     AteSeja,
@@ -67,31 +75,33 @@ pub enum TokenKind {
     FimPara,
     IrPara,
 
-    // ---- Entrada/Saída (seção 6) -------------------------------------------
+    // ---- Entrada/Saída -------------------------------------------
     Leia,
     Escreva,
+    /// `escreva_ln` — mesma sintaxe de `escreva`, com `\n`
+    /// automático ao final de toda a lista de itens.
     EscrevaLn,
     LeiaSeco,
     Pausa,
 
-    // ---- Comandos de console — estilo CONIO (seção 6.3) --------------------
+    // ---- Comandos de console — estilo CONIO --------------------
     Limpar,
     LimparLinha,
     Posicionar,
     CorFundo,
     CorFrente,
 
-    // ---- Estruturas de dados (seção 4.4/4.5) -------------------------------
+    // ---- Estruturas de dados -------------------------------
     Registro,
     FimRegistro,
     Conjunto,
     Dimensione,
 
-    // ---- Sub-rotinas (seção 9) ---------------------------------------------
+    // ---- Sub-rotinas ---------------------------------------------
     Procedimento,
     Funcao,
 
-    // ---- Programação Orientada a Objetos (seção 10) ------------------------
+    // ---- Programação Orientada a Objetos ------------------------
     Classe,
     FimClasse,
     Heranca,
@@ -102,7 +112,7 @@ pub enum TokenKind {
     SecaoPrivada,
     Este,
 
-    // ---- Tipos primitivos (seção 3) ----------------------------------------
+    // ---- Tipos primitivos ----------------------------------------
     TipoInteiro,
     TipoReal,
     TipoCadeia,
@@ -110,10 +120,10 @@ pub enum TokenKind {
     TipoLogico,
     Generico,
 
-    // ---- Operadores aritméticos (seção 5.2) --------------------------------
-    /// `+` (adição ou concatenação de cadeia, seção 10.5.2)
+    // ---- Operadores aritméticos --------------------------------
+    /// `+` (adição ou concatenação de cadeia)
     Mais,
-    /// `-` ou `–` (en-dash, sinônimo aceito — seção 5.2)
+    /// `-` ou `–` (en-dash, sinônimo aceito )
     Menos,
     /// `*`
     Asterisco,
@@ -123,10 +133,10 @@ pub enum TokenKind {
     Div,
     /// `mod` — resto da divisão
     Mod,
-    /// `↑` ou `^` (sinônimo aceito — seção 5.2)
+    /// `↑` ou `^` (sinônimo aceito )
     Potencia,
 
-    // ---- Operadores lógicos (seção 5.4) ------------------------------------
+    // ---- Operadores lógicos ------------------------------------
     /// `.e.`
     E,
     /// `.ou.`
@@ -136,7 +146,7 @@ pub enum TokenKind {
     /// `.xou.`
     Xou,
 
-    // ---- Operadores relacionais (seção 5.3) --------------------------------
+    // ---- Operadores relacionais --------------------------------
     Igual,
     Diferente,
     Menor,
@@ -144,7 +154,7 @@ pub enum TokenKind {
     MenorIgual,
     MaiorIgual,
 
-    // ---- Atribuição (seção 5.1) --------------------------------------------
+    // ---- Atribuição --------------------------------------------
     /// `←` ou `<-` (sinônimo aceito)
     Seta,
 
@@ -154,7 +164,7 @@ pub enum TokenKind {
     AbreColchete,
     FechaColchete,
     Virgula,
-    /// `:` — separador de tipo, especificador de formatação (seção 6.2.1)
+    /// `:` — separador de tipo, especificador de formatação
     DoisPontos,
     /// `.` — acesso a campo (`REGISTRO.CAMPO`)
     Ponto,
@@ -167,7 +177,7 @@ pub enum TokenKind {
 
 impl fmt::Display for TokenKind {
     /// Mostra cada token na grafia real da PEPPE (ex.: `início`, `então`,
-    /// `.não.`, `←`), usado nas mensagens de erro do parser (seção 15.3),
+    /// `.não.`, `←`) — usado nas mensagens de erro do parser,
     /// para que "esperava 'fim_se'" seja legível por um aluno, não
     /// "esperava 'FimSe'".
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -277,6 +287,8 @@ impl fmt::Display for TokenKind {
             Barra => write!(f, "/"),
             Div => write!(f, "div"),
             Mod => write!(f, "mod"),
+            // '^' é a forma canônica (mais fácil de digitar); '↑' é
+            // aceito como sinônimo tipográfico.
             Potencia => write!(f, "^"),
 
             // Operadores lógicos
@@ -292,6 +304,10 @@ impl fmt::Display for TokenKind {
             Maior => write!(f, ">"),
             MenorIgual => write!(f, "<="),
             MaiorIgual => write!(f, ">="),
+
+            // Atribuição
+            // '<-' é a forma canônica (mais fácil de digitar); '←'
+            // é aceito como sinônimo tipográfico.
             Seta => write!(f, "<-"),
 
             // Pontuação

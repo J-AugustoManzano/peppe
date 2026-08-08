@@ -1,6 +1,6 @@
-//! Verificador semântico (seção 15) — primeira passada: tabela de símbolos
+//! Verificador semântico — primeira passada: tabela de símbolos
 //! e resolução de declarações de nível superior (`const`/`tipo`/`var`/
-//! `procedimento`/`função`, seções 4 e 9).
+//! `procedimento`/`função`).
 //!
 //! ## Arquitetura
 //!
@@ -13,18 +13,19 @@
 //!    antes de sua declaração textual (ex.: `CAD_ALUNO` usando `BIMESTRE`
 //!    definido depois) e detecta nomes de tipo duplicados.
 //!
-//!    **Simplificação v1:** todos os `tipo` do programa entram em uma única
-//!    tabela "global", mesmo os declarados dentro de uma sub-rotina. Os
-//!    exemplos do livro não declaram tipos locais; revisitar se isso mudar.
+//!    Todos os `tipo` do programa entram em uma única tabela "global",
+//!    mesmo os declarados dentro de uma sub-rotina — os exemplos do livro
+//!    não declaram tipos locais, então essa simplificação não causa
+//!    ambiguidade na prática.
 //!
 //! 2. [`Verificador::processar_declaracoes`] — percorre as declarações na
 //!    ordem do código, desta vez construindo a [`TabelaSimbolos`]
-//!    (escopos aninhados, *case-insensitive* — seção 1.3): `const`/`var`
+//!    (escopos aninhados, *case-insensitive* ): `const`/`var`
 //!    têm seu tipo resolvido e são declarados no escopo atual; `tipo` é
 //!    declarado (para detecção de colisão de nomes); `procedimento`/
 //!    `função` têm a assinatura resolvida, são declarados no escopo atual e
 //!    abrem um novo escopo para seus parâmetros e declarações locais
-//!    (recursivamente — seção 9.6, sub-rotinas aninhadas). Ao final de cada
+//!    (recursivamente , sub-rotinas aninhadas). Ao final de cada
 //!    sub-rotina (e do programa principal), [`Verificador::verificar_bloco`]
 //!    verifica os comandos do `corpo`/`bloco_principal` com o escopo já
 //!    montado.
@@ -36,7 +37,7 @@
 //! operadores (via `tipos::tipo_resultado_binario`/`tipo_resultado_unario`),
 //! acesso a campo/índice válido para o tipo correspondente, condições de
 //! `se`/laços do tipo `lógico`, `interrompa`/`saia_caso` apenas dentro de
-//! um laço, e `ir_para`/rótulos (seção 8): cada `corpo` de sub-rotina e o
+//! um laço, e `ir_para`/rótulos: cada `corpo` de sub-rotina e o
 //! `bloco_principal` têm seus rótulos coletados primeiro (escopo de
 //! rótulo = a sub-rotina/programa inteiro, não o bloco aninhado onde o
 //! rótulo aparece — mesmo modelo de BASIC/Pascal clássicos), com detecção
@@ -53,12 +54,12 @@ use crate::tipos::{
 use std::collections::HashMap;
 
 // =====================================================================================
-// Erros semânticos (seção 15.3)
+// Erros semânticos
 // =====================================================================================
 
-/// Um erro semântico — sem coluna (a AST guarda apenas `linha`, seção 12).
+/// Um erro semântico — sem coluna (a AST guarda apenas `linha`).
 /// O verificador acumula **todos** os erros encontrados, em vez de parar no
-/// primeiro (seção 15: "reporta todos os erros estáticos de uma vez").
+/// primeiro ("reporta todos os erros estáticos de uma vez").
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErroSemantico {
     pub linha: usize,
@@ -100,20 +101,20 @@ pub enum CategoriaSimbolo {
     /// [`resolver_tipo`].
     Tipo(TipoResolvido),
     Var(TipoResolvido),
-    /// Uma ou mais assinaturas para o mesmo nome (seção 10.5 — sobrecarga
+    /// Uma ou mais assinaturas para o mesmo nome (sobrecarga
     /// ad-hoc): `CALCULAR(X:inteiro)`, `CALCULAR(R,H:real)` e
     /// `CALCULAR(X,Y,Z:inteiro)` compartilham uma única entrada na tabela
     /// de símbolos, com três elementos neste vetor. O caso comum (nome
     /// declarado uma única vez) é só um vetor de tamanho 1 — todo o
-    /// código que já existia antes da Fase 5 e assumia uma assinatura
-    /// única precisa, a partir daqui, escolher a candidata certa (ver
+    /// código que assumia uma assinatura única precisa, a partir daqui,
+    /// escolher a candidata certa (ver
     /// [`Verificador::resolver_sobrecarga`]).
     SubRotina(Vec<AssinaturaSubRotina>),
 }
 
 impl CategoriaSimbolo {
-    /// Descrição em português, para mensagens de erro (seção 15.3). Para
-    /// `SubRotina` com múltiplas assinaturas (sobrecarga, seção 10.5),
+    /// Descrição em português, para mensagens de erro. Para
+    /// `SubRotina` com múltiplas assinaturas (sobrecarga),
     /// usa a categoria da primeira — todas as sobrecargas de um mesmo
     /// nome compartilham a mesma categoria (procedimento ou função; ver
     /// [`Verificador::pode_sobrecarregar`], que impede misturar as duas).
@@ -133,7 +134,7 @@ impl CategoriaSimbolo {
 }
 
 /// Um identificador declarado: categoria + onde foi declarado, com a grafia
-/// original (para mensagens de erro — seção 1.3 preserva a grafia da
+/// original (para mensagens de erro  preserva a grafia da
 /// primeira declaração).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Simbolo {
@@ -142,10 +143,10 @@ pub struct Simbolo {
     pub linha_declaracao: usize,
 }
 
-/// Pilha de escopos *case-insensitive* (seção 1.3): índice 0 é o escopo
+/// Pilha de escopos *case-insensitive*: índice 0 é o escopo
 /// global; o último é o escopo atual. A busca de identificadores percorre
 /// do escopo atual até o global (lexical scoping — sub-rotinas aninhadas
-/// veem o escopo de quem as contém, seção 9.6).
+/// veem o escopo de quem as contém).
 #[derive(Debug, Clone)]
 pub struct TabelaSimbolos {
     escopos: Vec<HashMap<String, Simbolo>>,
@@ -166,8 +167,8 @@ impl TabelaSimbolos {
     }
 
     /// Declara `nome_original` no escopo **atual**. Erro se outro
-    /// identificador com o mesmo nome (ignorando maiúsculas/minúsculas —
-    /// seção 1.3) já existir nesse mesmo escopo; *shadowing* de um escopo
+    /// identificador com o mesmo nome (ignorando maiúsculas/minúsculas)
+    /// já existir nesse mesmo escopo; *shadowing* de um escopo
     /// externo é permitido (é o comportamento normal de variáveis locais).
     pub fn declarar(
         &mut self,
@@ -182,7 +183,7 @@ impl TabelaSimbolos {
             let nota_case = if existente.nome_original != nome_original {
                 format!(
                     " Note que '{}' e '{}' são o mesmo identificador em PEPPE \
-                     (maiúsculas/minúsculas não importam — seção 1.3).",
+                     (maiúsculas/minúsculas não importam ).",
                     existente.nome_original, nome_original
                 )
             } else {
@@ -214,7 +215,7 @@ impl TabelaSimbolos {
     }
 
     /// Como [`Self::buscar`], mas só no escopo **atual** (não sobe para
-    /// escopos pais) — necessário para sobrecarga (seção 10.5): uma
+    /// escopos pais) — necessário para sobrecarga: uma
     /// segunda sub-rotina com o mesmo nome só se acumula às anteriores
     /// quando ambas estão no mesmo escopo; se a primeira estiver num
     /// escopo pai, a nova é uma declaração independente que apenas
@@ -227,7 +228,7 @@ impl TabelaSimbolos {
     /// Busca `nome` ignorando o escopo mais interno (o atual) — usado
     /// para chamada recursiva de função pelo próprio nome: dentro do
     /// corpo de `FATORIAL`, o escopo atual declara `FATORIAL` como `Var`
-    /// (variável de retorno, seção 9.2); nos escopos externos está a
+    /// (variável de retorno); nos escopos externos está a
     /// `SubRotina` em si. Pulando o escopo atual, encontramos a
     /// sub-rotina e permitimos a chamada recursiva (estilo Pascal).
     pub fn buscar_em_escopos_externos(&self, nome: &str) -> Option<&Simbolo> {
@@ -240,7 +241,7 @@ impl TabelaSimbolos {
     /// Substitui a categoria do símbolo `nome_original` já existente no
     /// escopo **atual** — usado exclusivamente para acrescentar uma nova
     /// assinatura a um `CategoriaSimbolo::SubRotina` já declarado
-    /// (sobrecarga, seção 10.5). Não altera `nome_original`/
+    /// (sobrecarga). Não altera `nome_original`/
     /// `linha_declaracao` (a mensagem de erro de qualquer problema
     /// continua citando a primeira declaração). Painc se `nome` não
     /// existir no escopo atual — só deve ser chamado depois de confirmar
@@ -310,12 +311,12 @@ pub fn verificar(programa: &Programa) -> ResultadoVerificacao {
 }
 
 // =====================================================================================
-// Classes (seção 10) — informação coletada do verificador semântico
+// Classes — informação coletada do verificador semântico
 // =====================================================================================
 
 /// Resultado de resolver um nome de campo/método através da árvore de
-/// herança (Fase 6 — múltiplas bases diretas por classe, sem herança
-/// virtual). Generaliza o que antes era um simples `Option` quando só
+/// herança (múltiplas bases diretas por classe, sem herança virtual).
+/// Generaliza o que seria um simples `Option` quando só
 /// havia uma cadeia linear de herança possível.
 enum ResolucaoMembro<T> {
     /// Achado numa única classe (`String` = nome dela, em minúsculas) —
@@ -344,16 +345,16 @@ struct InfoCampo {
 }
 
 /// Um método de classe, já com assinatura resolvida e visibilidade
-/// (seção 10.1/10.3/10.4). `implementado` é preenchido por
+///. `implementado` é preenchido por
 /// [`Verificador::validar_implementacao_de_metodos`], depois que toda
 /// declaração de nível superior (incluindo `MetodoExterno`) já foi vista —
-/// método sem implementação em nenhum lugar é erro semântico (seção 10.3).
+/// método sem implementação em nenhum lugar é erro semântico.
 #[derive(Debug, Clone, PartialEq)]
 struct InfoMetodo {
     nome: String,
     assinatura: AssinaturaSubRotina,
     visibilidade: Visibilidade,
-    /// `virtual`/`sobrepor`/nenhum (seção 10.6) — usado para validar a
+    /// `virtual`/`sobrepor`/nenhum — usado para validar a
     /// relação entre um método `sobrepor` e o `virtual` correspondente
     /// na cadeia de herança, e para decidir dispatch dinâmico vs.
     /// estático em tempo de execução.
@@ -364,13 +365,13 @@ struct InfoMetodo {
 
 /// Informação completa de uma classe, montada na passada de coleta
 /// (`coletar_classes`) a partir de `tipo NOME = classe ... fim_classe`
-/// (seção 10.1).
+///.
 #[derive(Debug, Clone, PartialEq)]
 struct InfoClasse {
     nome: String,
     /// Nomes das classes-base **diretas** (`classe herança de X[, de
-    /// Y, ...]`, seção 10.1) — vazio se não houver, um elemento para
-    /// herança simples, dois ou mais para herança múltipla (Fase 6).
+    /// Y, ...]`) — vazio se não houver, um elemento para
+    /// herança simples, dois ou mais para herança múltipla.
     heranca: Vec<String>,
     campos: Vec<InfoCampo>,
     metodos: Vec<InfoMetodo>,
@@ -382,7 +383,7 @@ impl InfoClasse {
         self.campos.iter().find(|c| c.nome.eq_ignore_ascii_case(nome))
     }
 
-    /// **Todas** as sobrecargas (seção 10.5) de `nome` na classe — uma
+    /// **Todas** as sobrecargas de `nome` na classe — uma
     /// chamada de método precisa ver todas as candidatas para escolher a
     /// certa pelos tipos dos argumentos, não só a primeira declarada.
     fn metodos_por_nome(&self, nome: &str) -> Vec<&InfoMetodo> {
@@ -398,12 +399,12 @@ struct Verificador {
     erros: Vec<ErroSemantico>,
     /// Quantos laços (`enquanto`/`até_seja`/`repita`/`execute`/`laço`/`para`)
     /// envolvem o comando atual — usado para validar que `interrompa` e
-    /// `saia_caso` só aparecem dentro de um laço (seção 8).
+    /// `saia_caso` só aparecem dentro de um laço.
     profundidade_laco: usize,
     /// Conjunto de rótulos (nome em minúsculas) declarados em **toda** a
     /// sub-rotina/programa atualmente sendo verificado — coletado uma vez,
     /// recursivamente em qualquer nível de bloco aninhado (`se`/laços/
-    /// `caso`), por [`Verificador::coletar_rotulos`]. `ir_para` (seção 8)
+    /// `caso`), por [`Verificador::coletar_rotulos`]. `ir_para`
     /// pode saltar para qualquer rótulo deste conjunto: rótulos não
     /// atravessam fronteiras de sub-rotina (cada `função`/`procedimento`
     /// tem seu próprio espaço de rótulos), mas podem atravessar blocos
@@ -414,7 +415,7 @@ struct Verificador {
     rotulos_validos: std::collections::HashSet<String>,
     /// nome de classe em minúsculas -> informação completa (campos,
     /// métodos, herança), montada por [`Verificador::coletar_classes`]
-    /// (seção 10.1).
+    ///.
     info_classes: HashMap<String, InfoClasse>,
     /// nome de classe em minúsculas -> nomes das classes-base diretas
     /// (vazio se não houver). Derivado de `info_classes`, mantido
@@ -444,7 +445,7 @@ impl Verificador {
                             mensagem: format!(
                                 "o tipo '{}' já foi definido anteriormente (como '{}'). \
                                  Cada nome de tipo só pode ser definido uma vez com 'tipo' \
-                                 (PEPPE é case-insensitive — seção 1.3).",
+                                 (PEPPE é case-insensitive ).",
                                 t.nome, nome_existente
                             ),
                         });
@@ -460,8 +461,8 @@ impl Verificador {
     }
 
     /// Percorre todas as `tipo NOME = classe ... fim_classe` (qualquer
-    /// nível, mesma simplificação v1 de `coletar_tipos`) e monta
-    /// `info_classes`/`tabela_heranca` (seção 10.1). Roda depois de
+    /// nível, mesma simplificação de `coletar_tipos`) e monta
+    /// `info_classes`/`tabela_heranca`. Roda depois de
     /// `coletar_tipos` (precisa de `tabela_tipos` completa, para resolver
     /// o tipo de cada campo) e antes de `validar_implementacao_de_metodos`
     /// e `processar_declaracoes`.
@@ -553,7 +554,7 @@ impl Verificador {
 
     /// Resolve os tipos de uma assinatura de método (categoria, parâmetros,
     /// tipo de retorno) para [`AssinaturaSubRotina`] — mesma lógica usada
-    /// para sub-rotinas de nível superior (seção 9), reaproveitada aqui.
+    /// para sub-rotinas de nível superior, reaproveitada aqui.
     /// Erros de tipo não resolvido em parâmetro/retorno são reportados
     /// (com `TipoResolvido::Generico` como valor de fallback, para não
     /// interromper a coleta).
@@ -600,7 +601,7 @@ impl Verificador {
         }
     }
 
-    /// Valida sobrecarga ad-hoc (seção 10.5) entre métodos da **mesma**
+    /// Valida sobrecarga ad-hoc entre métodos da **mesma**
     /// classe: dois métodos com o mesmo nome só podem coexistir se (a)
     /// tiverem a mesma categoria (`procedimento`/`função` não se
     /// misturam sob o mesmo nome — mesma regra de sub-rotinas soltas,
@@ -614,7 +615,7 @@ impl Verificador {
     /// método — um `Sobrepor`/`Virtual` participando de uma sobrecarga
     /// (outro método de mesmo nome, assinatura diferente, na mesma
     /// classe) é permitido; a obrigação de assinatura **idêntica** ao
-    /// `virtual` da base (seção 10.6) é checada separadamente em
+    /// `virtual` da base é checada separadamente em
     /// `validar_overrides`, e não impede que outras sobrecargas do
     /// mesmo nome existam na classe.
     fn validar_sobrecargas_de_metodo(&mut self) {
@@ -630,7 +631,7 @@ impl Verificador {
                             linha: metodo.linha_assinatura,
                             mensagem: format!(
                                 "'{}' já foi declarado como {} em '{}' (linha {}) — uma \
-                                 sobrecarga (seção 10.5) precisa manter a mesma categoria \
+                                 sobrecarga  precisa manter a mesma categoria \
                                  ('procedimento' ou 'função') em todas as versões.",
                                 metodo.nome,
                                 if anterior.assinatura.categoria == CategoriaSubRotina::Funcao {
@@ -647,7 +648,7 @@ impl Verificador {
                             linha: metodo.linha_assinatura,
                             mensagem: format!(
                                 "'{}' já foi declarado com a mesma quantidade e tipos de \
-                                 parâmetro em '{}' (linha {}) — duas sobrecargas (seção 10.5) \
+                                 parâmetro em '{}' (linha {}) — duas sobrecargas  \
                                  precisam ter aridade ou tipos de parâmetro diferentes.",
                                 metodo.nome, info.nome, anterior.linha_assinatura
                             ),
@@ -659,13 +660,13 @@ impl Verificador {
         }
     }
 
-    /// Valida o uso de `virtual`/`sobrepor` (seção 10.6) em todas as
+    /// Valida o uso de `virtual`/`sobrepor` em todas as
     /// classes já coletadas (`info_classes`). Roda logo depois de
     /// `coletar_classes`, antes de qualquer outra verificação que
     /// dependa de métodos — assim os erros de override aparecem mesmo
     /// que o corpo dos métodos tenha outros problemas.
     ///
-    /// Regras (seção 10.6):
+    /// Regras:
     /// 1. Um método `Modificador::Sobrepor` precisa ter, na classe-base
     ///    **direta**, um método de mesmo nome com `Modificador::Virtual`
     ///    ou `Modificador::Sobrepor` e assinatura idêntica (mesma
@@ -676,7 +677,7 @@ impl Verificador {
     ///    coincidem com um `virtual`/`sobrepor` da base é erro — força o
     ///    programador a escrever `sobrepor` explicitamente quando a
     ///    intenção é redefinir, em vez de criar uma sobrecarga acidental
-    ///    com o mesmo nome (ver seção 10.6, regra 2).
+    ///    com o mesmo nome.
     fn validar_overrides(&mut self) {
         let nomes_classes: Vec<String> = self.info_classes.keys().cloned().collect();
         for chave in nomes_classes {
@@ -695,7 +696,7 @@ impl Verificador {
                     match self.buscar_metodo_com_heranca(base, &metodo.nome) {
                         ResolucaoMembro::Encontrado(candidatos, doadora) => {
                             // Sobrepor não participa de sobrecarga
-                            // (seção 10.6 exige assinatura idêntica) —
+                            // (exige assinatura idêntica) —
                             // qualquer candidata de mesmo nome na base
                             // já é o suficiente para localizar "o"
                             // virtual correspondente; se houver mais de
@@ -736,7 +737,7 @@ impl Verificador {
                             "'{}' usa 'sobrepor', mas '{}' existe em mais de uma classe-base \
                              ({}) com assinaturas diferentes entre si — não há um único \
                              'virtual' correspondente para sobrepor (Fase 6 — herança \
-                             múltipla, seção 10.1/10.6).",
+                             múltipla).",
                             metodo.nome,
                             metodo.nome,
                             nomes_doadoras_unicos.join(", ")
@@ -753,7 +754,7 @@ impl Verificador {
                                 mensagem: format!(
                                     "'{}' usa 'sobrepor', mas nenhuma classe-base declara \
                                      um método chamado '{}' — 'sobrepor' só pode redefinir \
-                                     um método 'virtual' já existente na base (seção 10.6).",
+                                     um método 'virtual' já existente na base .",
                                     metodo.nome, metodo.nome
                                 ),
                             });
@@ -788,7 +789,7 @@ impl Verificador {
                                      do método 'virtual' correspondente em '{}' (mesma \
                                      quantidade e tipos de parâmetro, mesmo tipo de retorno) — \
                                      uma assinatura diferente é uma nova sobrecarga, não um \
-                                     override, e não deve usar 'sobrepor' (seção 10.6).",
+                                     override, e não deve usar 'sobrepor' .",
                                     metodo.nome, doadora
                                 ),
                             });
@@ -810,7 +811,7 @@ impl Verificador {
                                         "'{}' redefine o método 'virtual' de mesmo nome e \
                                          assinatura declarado em '{}', mas não usa 'sobrepor' \
                                          — adicione 'sobrepor' para deixar explícito que esta é \
-                                         uma redefinição intencional (seção 10.6).",
+                                         uma redefinição intencional .",
                                         metodo.nome, doadora
                                     ),
                                 });
@@ -828,7 +829,7 @@ impl Verificador {
     /// `coletar_classes`) ou como [`DeclaracaoTopo::MetodoExterno`] em
     /// qualquer lugar do programa — e reporta erro semântico didático
     /// para toda assinatura que continuar sem implementação depois disso
-    /// (seção 10.3). Roda depois de `coletar_classes`.
+    ///. Roda depois de `coletar_classes`.
     fn validar_implementacao_de_metodos(&mut self, declaracoes: &[DeclaracaoTopo]) {
         self.marcar_metodos_externos_implementados(declaracoes);
         let nomes_classes: Vec<String> = self.info_classes.keys().cloned().collect();
@@ -843,7 +844,7 @@ impl Verificador {
                              implementado — nem internamente (corpo dentro de 'classe ... \
                              fim_classe') nem externamente ('função {}..{}(...) ... fim' \
                              ou 'procedimento {}..{}(...) ... fim'). Toda assinatura de \
-                             método precisa de uma implementação (seção 10.3).",
+                             método precisa de uma implementação .",
                             metodo.nome, info.nome, info.nome, metodo.nome, info.nome, metodo.nome
                         ),
                     });
@@ -855,7 +856,7 @@ impl Verificador {
     /// Marca `implementado = true` em cada [`InfoMetodo`] cuja
     /// implementação externa foi encontrada — casando por **assinatura
     /// completa** (nome + lista de tipos de parâmetro), não só por
-    /// nome, para que sobrecarga (seção 10.5) funcione: duas assinaturas
+    /// nome, para que sobrecarga funcione: duas assinaturas
     /// `AssinaturaMetodo` de mesmo nome (`CALCULAR(X:inteiro)` e
     /// `CALCULAR(R,H:real)`) precisam casar, cada uma, com a
     /// implementação externa de mesmos tipos de parâmetro — nunca as
@@ -879,7 +880,7 @@ impl Verificador {
                                 linha: metodo.linha,
                                 mensagem: format!(
                                     "'{}..{}' implementa um método externo, mas nenhuma das \
-                                     sobrecargas (seção 10.5) de '{}' na classe '{}' tem essa \
+                                     sobrecargas  de '{}' na classe '{}' tem essa \
                                      mesma quantidade e tipos de parâmetro — confira se a \
                                      implementação bate com alguma das assinaturas \
                                      declaradas.",
@@ -903,7 +904,7 @@ impl Verificador {
                             linha: metodo.linha,
                             mensagem: format!(
                                 "'{}..{}' implementa um método externo, mas '{}' não é \
-                                 uma classe declarada (seção 10.3).",
+                                 uma classe declarada .",
                                 classe, metodo.nome, classe
                             ),
                         });
@@ -931,7 +932,7 @@ impl Verificador {
         }
     }
 
-    /// `const NOME = <literal>` (seção 4.1) — o tipo vem diretamente da
+    /// `const NOME = <literal>` — o tipo vem diretamente da
     /// variante de [`Expr`] (garantido pelo parser: `parse_literal` só
     /// produz `Inteiro`/`Real`/`Texto`/`Caractere`/`Logico`).
     fn processar_const(&mut self, c: &DeclaracaoConst) {
@@ -948,14 +949,14 @@ impl Verificador {
         }
     }
 
-    /// `tipo NOME = <definição>` (seção 4.3/4.4/4.5) — resolve a definição
+    /// `tipo NOME = <definição>` — resolve a definição
     /// (com a tabela de tipos já completa, seção "coletar_tipos") e declara
     /// o nome no escopo atual (detecção de colisão com `const`/`var`/
     /// sub-rotinas de mesmo nome).
     fn processar_tipo(&mut self, t: &DeclaracaoTipo) {
         // 'classe' não passa por 'resolver_tipo' (ver nota em
         // 'tipos::resolver_tipo_rec') — a informação completa já foi
-        // coletada em 'coletar_classes' (seção 10.1); aqui só precisamos
+        // coletada em 'coletar_classes'; aqui só precisamos
         // declarar o nome no escopo (para detecção de colisão com
         // const/var/sub-rotinas) com um TipoResolvido::Classe mínimo, e
         // verificar o corpo de cada método implementado internamente
@@ -987,7 +988,7 @@ impl Verificador {
         }
     }
 
-    /// `var NOME1, NOME2, ... : <tipo>` (seção 4.2).
+    /// `var NOME1, NOME2, ... : <tipo>`.
     fn processar_var(&mut self, v: &DeclaracaoVar) {
         match resolver_tipo(&v.tipo, &self.tabela_tipos) {
             Ok(resolvido) => {
@@ -1008,8 +1009,8 @@ impl Verificador {
         }
     }
 
-    /// Declara `nome` no escopo atual com `assinatura` (seção 9), com
-    /// suporte a **sobrecarga ad-hoc** (seção 10.5): se já existir uma
+    /// Declara `nome` no escopo atual com `assinatura`, com
+    /// suporte a **sobrecarga ad-hoc**: se já existir uma
     /// sub-rotina com esse nome no mesmo escopo, a nova assinatura é
     /// **acrescentada** à lista de sobrecargas em vez de gerar erro de
     /// redeclaração — desde que (a) a categoria seja a mesma
@@ -1047,7 +1048,7 @@ impl Verificador {
                                 linha,
                                 mensagem: format!(
                                     "'{nome}' já foi declarado como {} na linha {} — uma \
-                                     sobrecarga (seção 10.5) precisa manter a mesma categoria \
+                                     sobrecarga  precisa manter a mesma categoria \
                                      ('procedimento' ou 'função') em todas as versões.",
                                     descricao_anterior,
                                     linha_anterior
@@ -1060,7 +1061,7 @@ impl Verificador {
                                 linha,
                                 mensagem: format!(
                                     "'{nome}' já foi declarado com a mesma quantidade e tipos de \
-                                     parâmetro na linha {} — duas sobrecargas (seção 10.5) \
+                                     parâmetro na linha {} — duas sobrecargas  \
                                      precisam ter aridade ou tipos de parâmetro diferentes; do \
                                      contrário, uma chamada não saberia qual delas usar.",
                                     linha_anterior
@@ -1094,17 +1095,17 @@ impl Verificador {
     }
 
     /// `(procedimento|função) NOME(<parâmetros>) [: <retorno>] <declarações
-    /// locais> início <corpo> fim` (seção 9).
+    /// locais> início <corpo> fim`.
     ///
     /// 1. Resolve a assinatura (tipos dos parâmetros e do retorno).
     /// 2. Declara `NOME` no escopo **atual** (permite chamada recursiva e
     ///    chamadas de sub-rotinas declaradas mais abaixo no mesmo escopo).
     /// 3. Abre um novo escopo: para `função`, o próprio nome também é
     ///    declarado *dentro* desse escopo como uma variável do tipo de
-    ///    retorno — é assim que `NOME <- <expr>` (seção 9.2) define o valor
+    ///    retorno — é assim que `NOME <- <expr>` define o valor
     ///    retornado.
     /// 4. Declara os parâmetros e processa `declaracoes_locais`
-    ///    recursivamente (incluindo sub-rotinas aninhadas, seção 9.6, que
+    ///    recursivamente (incluindo sub-rotinas aninhadas, que
     ///    assim veem este escopo — lexical scoping).
     /// 5. Fecha o escopo. A verificação de `corpo` é a próxima etapa.
     fn processar_subrotina(&mut self, sub: &SubRotina) {
@@ -1146,7 +1147,7 @@ impl Verificador {
 
         if sub.categoria == CategoriaSubRotina::Funcao {
             if let Some(tr) = &tipo_retorno {
-                // 'NOME <- expr' dentro do corpo define o retorno (seção 9.2).
+                // 'NOME <- expr' dentro do corpo define o retorno.
                 if let Err(e) =
                     self.tabela.declarar(&sub.nome, CategoriaSimbolo::Var(tr.clone()), sub.linha)
                 {
@@ -1172,7 +1173,7 @@ impl Verificador {
     }
 
     /// `função <Classe>..<MÉTODO>(...) [: tipo] ... início ... fim`, ou a
-    /// forma `procedimento` equivalente (seção 10.3, implementação
+    /// forma `procedimento` equivalente (implementação
     /// externa de método). Busca a [`InfoClasse`] de `classe` e delega
     /// para [`Verificador::processar_corpo_de_metodo`].
     fn processar_metodo_externo(&mut self, classe: &str, metodo: &SubRotina) {
@@ -1186,7 +1187,7 @@ impl Verificador {
     }
 
     /// Implementação **interna** de um método (corpo dentro da própria
-    /// declaração de `classe ... fim_classe`, seção 10.3). Busca a
+    /// declaração de `classe ... fim_classe`). Busca a
     /// [`InfoClasse`] de `nome_classe` e delega para
     /// [`Verificador::processar_corpo_de_metodo`] — mesmo tratamento de
     /// `este`/campos/parâmetros que um método externo.
@@ -1201,7 +1202,7 @@ impl Verificador {
         self.processar_corpo_de_metodo(&info, metodo);
     }
 
-    /// Núcleo comum a método interno e externo (seção 10.3): resolve a
+    /// Núcleo comum a método interno e externo: resolve a
     /// assinatura, abre um escopo com `este`/campos da classe (seção
     /// 10.4) seguido de um escopo aninhado para os parâmetros (para que
     /// um parâmetro possa sombrear um campo de mesmo nome — ex.:
@@ -1259,7 +1260,7 @@ impl Verificador {
             }
         }
 
-        // 'classe_atual' (seção 10.4.1) habilita acesso a membros
+        // 'classe_atual' habilita acesso a membros
         // 'seção_privada'/'seção_protegida' enquanto verificamos o corpo
         // deste método — restaurado ao valor anterior (não apenas
         // limpo para `None`) para que métodos chamados/processados a
@@ -1279,15 +1280,15 @@ impl Verificador {
     }
 
     /// Coleta todos os campos de `nome_classe` que resolvem **sem
-    /// ambiguidade** através da árvore de herança (seção 10.1/10.4,
-    /// Fase 6) — usado para declarar, no escopo de um método, todos os
+    /// ambiguidade** através da árvore de herança —
+    /// usado para declarar, no escopo de um método, todos os
     /// campos (próprios e herdados) acessíveis diretamente por nome,
     /// sem prefixo (mesma convenção do interpretador, ver
     /// `interpreter::valor_padrao_classe`).
     ///
     /// ⚠️ **Limitação conhecida:** um campo cujo nome é ambíguo entre
-    /// duas bases (Fase 6 — ex.: duas bases diretas com um campo de
-    /// mesmo nome) é **omitido** desta lista — não entra no escopo
+    /// duas bases (ex.: duas bases diretas com um campo de mesmo
+    /// nome) é **omitido** desta lista — não entra no escopo
     /// direto do método. Usá-lo sem qualificação dentro do corpo do
     /// método gera "identificador não declarado" em vez da mensagem de
     /// ambiguidade mais específica que `buscar_campo_com_heranca`
@@ -1330,7 +1331,7 @@ impl Verificador {
     }
 
     /// Declara, no escopo atual (já aberto pelo chamador), o contexto
-    /// comum a qualquer corpo de método de `info.nome` (seção 10.3/10.4):
+    /// comum a qualquer corpo de método de `info.nome`:
     /// `este` (referência à própria classe), todos os campos da classe
     /// e da cadeia de herança diretamente por nome, e — se for
     /// `função` — o próprio nome do método como variável de retorno
@@ -1368,7 +1369,7 @@ impl Verificador {
     }
 
     // =================================================================================
-    // Verificação de comandos (seções 6, 7, 8, 9.7)
+    // Verificação de comandos 
     // =================================================================================
 
     /// Verifica o corpo de uma sub-rotina (ou o `bloco_principal` do
@@ -1376,7 +1377,7 @@ impl Verificador {
     /// bloco aninhado dentro de `bloco` (uma única vez, recursivamente —
     /// ver [`Verificador::coletar_rotulos`]) antes de verificar os
     /// comandos, e restaura o conjunto de rótulos anterior ao final (para
-    /// que sub-rotinas aninhadas, seção 9.6, tenham seu próprio espaço de
+    /// que sub-rotinas aninhadas, tenham seu próprio espaço de
     /// rótulos, isolado do da sub-rotina que as contém).
     fn verificar_bloco_de_subrotina(&mut self, bloco: &Bloco, tipo_retorno_atual: Option<&TipoResolvido>) {
         let novos_rotulos = self.coletar_rotulos(bloco);
@@ -1387,11 +1388,10 @@ impl Verificador {
 
     /// Coleta recursivamente todo `Comando::Rotulo` em `bloco`, incluindo
     /// dentro de `se`/laços/`caso` aninhados (mas NÃO atravessando o corpo
-    /// de uma sub-rotina aninhada, seção 9.6 — essa tem seu próprio espaço
+    /// de uma sub-rotina aninhada — essa tem seu próprio espaço
     /// de rótulos, coletado em sua própria chamada de
     /// [`Verificador::verificar_bloco_de_subrotina`]). Reporta erro se dois
-    /// rótulos no mesmo espaço tiverem o mesmo nome (case-insensitive —
-    /// seção 1.3).
+    /// rótulos no mesmo espaço tiverem o mesmo nome (case-insensitive).
     fn coletar_rotulos(&mut self, bloco: &Bloco) -> std::collections::HashSet<String> {
         let mut rotulos = std::collections::HashSet::new();
         self.coletar_rotulos_rec(bloco, &mut rotulos);
@@ -1408,7 +1408,7 @@ impl Verificador {
                             linha: *linha,
                             mensagem: format!(
                                 "o rótulo '{nome}' já foi declarado anteriormente nesta \
-                                 sub-rotina (PEPPE é case-insensitive — seção 1.3)."
+                                 sub-rotina (PEPPE é case-insensitive )."
                             ),
                         });
                     }
@@ -1435,7 +1435,7 @@ impl Verificador {
                 | Comando::Para { corpo, .. } => {
                     self.coletar_rotulos_rec(corpo, rotulos);
                 }
-                // Sub-rotinas aninhadas (seção 9.6) têm seu próprio espaço
+                // Sub-rotinas aninhadas têm seu próprio espaço
                 // de rótulos — não atravessado aqui.
                 _ => {}
             }
@@ -1462,7 +1462,7 @@ impl Verificador {
                         linha: *linha,
                         mensagem: format!(
                             "'{}' é uma chamada de método, não é um lugar que pode receber \
-                             atribuição (seção 10.4) — o valor de retorno de um método não \
+                             atribuição  — o valor de retorno de um método não \
                              pode ser usado como destino de '<-'.",
                             nome_lvalue(destino)
                         ),
@@ -1487,7 +1487,7 @@ impl Verificador {
                             mensagem: format!(
                                 "não é possível atribuir um valor '{}' a '{}' (tipo '{}') \
                                  sem conversão explícita. Use um cast, ex.: '{}({})' \
-                                 (seção 10.5.1).",
+                                 .",
                                 tv.nome_exibicao(),
                                 nome_lvalue(destino),
                                 td.nome_exibicao(),
@@ -1533,7 +1533,7 @@ impl Verificador {
                                     mensagem: format!(
                                         "o especificador de decimais (':decimais') só faz \
                                          sentido para valores 'real', mas o valor é '{}' \
-                                         (seção 6.2.1).",
+                                         .",
                                         t.nome_exibicao()
                                     ),
                                 });
@@ -1601,7 +1601,7 @@ impl Verificador {
                                 linha: *linha,
                                 mensagem: format!(
                                     "'{}' foi declarado com {} dimensão(ões), mas \
-                                     'dimensione' forneceu {} (seção 4.5.1) — o número de \
+                                     'dimensione' forneceu {}  — o número de \
                                      pares <início>..<fim> deve ser igual ao número de \
                                      dimensões na declaração do tipo.",
                                     variavel,
@@ -1633,7 +1633,7 @@ impl Verificador {
             }
 
             Comando::ChamadaMetodo { alvo, linha } => {
-                // Comando solto (seção 10.4): ignora o valor de retorno,
+                // Comando solto: ignora o valor de retorno,
                 // se houver — válido tanto para 'procedimento' (sem
                 // retorno) quanto para 'função' (descarta o retorno,
                 // mesma permissividade de 'ESTUDANTE.CALCMÉDIA()' no
@@ -1665,7 +1665,7 @@ impl Verificador {
                         mensagem: format!(
                             "o rótulo '{rotulo}' não foi declarado nesta sub-rotina. \
                              'ir_para' só pode saltar para um rótulo ('{rotulo}':) \
-                             definido na mesma sub-rotina ou programa (seção 8)."
+                             definido na mesma sub-rotina ou programa ."
                         ),
                     });
                 }
@@ -1676,7 +1676,7 @@ impl Verificador {
                     self.erros.push(ErroSemantico {
                         linha: *linha,
                         mensagem: "'interrompa' só pode ser usado dentro de um laço \
-                                   (enquanto/até_seja/repita/execute/laço/para) — seção 8."
+                                   (enquanto/até_seja/repita/execute/laço/para) ."
                             .to_string(),
                     });
                 }
@@ -1686,7 +1686,7 @@ impl Verificador {
                     self.erros.push(ErroSemantico {
                         linha: *linha,
                         mensagem: "'continue' só pode ser usado dentro de um laço \
-                                   (enquanto/até_seja/repita/execute/laço/para) — seção 8."
+                                   (enquanto/até_seja/repita/execute/laço/para) ."
                             .to_string(),
                     });
                 }
@@ -1696,7 +1696,7 @@ impl Verificador {
                     self.erros.push(ErroSemantico {
                         linha: *linha,
                         mensagem: "'saia_caso' só pode ser usado dentro de um 'laço' \
-                                   — seção 8."
+                                   ."
                             .to_string(),
                     });
                 }
@@ -1721,14 +1721,14 @@ impl Verificador {
     }
 
     /// Verifica o corpo de qualquer laço, incrementando/decrementando o
-    /// contador usado para validar `interrompa`/`saia_caso` (seção 8).
+    /// contador usado para validar `interrompa`/`saia_caso`.
     fn verificar_corpo_de_laco(&mut self, corpo: &Bloco, tipo_retorno_atual: Option<&TipoResolvido>) {
         self.profundidade_laco += 1;
         self.verificar_bloco(corpo, tipo_retorno_atual);
         self.profundidade_laco -= 1;
     }
 
-    /// `para VAR de ... até ...` (seção 8) — `VAR` deve existir e ser
+    /// `para VAR de ... até ...` — `VAR` deve existir e ser
     /// `inteiro` (ou `real`, embora seja pouco usual) ou `generico`.
     fn verificar_variavel_controle_para(&mut self, nome: &str, linha: usize) {
         let categoria_opt = self.tabela.buscar(nome).map(|s| s.categoria.clone());
@@ -1792,7 +1792,7 @@ impl Verificador {
 
     /// Verifica `expr` e reporta erro se seu tipo não for numérico —
     /// variante usada para os especificadores `:largura`/`:decimais` de
-    /// `escreva` (seção 6.2.1), que devem ser `inteiro`.
+    /// `escreva`, que devem ser `inteiro`.
     fn exigir_tipo_logico_ou_numerico_inteiro(&mut self, expr: &Expr, linha: usize, contexto: &str) {
         if let Some(t) = self.tipo_de_expr(expr) {
             if t != TipoResolvido::Inteiro && t != TipoResolvido::Generico {
@@ -1800,7 +1800,7 @@ impl Verificador {
                     linha,
                     mensagem: format!(
                         "o especificador de {contexto} em 'escreva' deve ser 'inteiro', \
-                         mas encontrei '{}' (seção 6.2.1).",
+                         mas encontrei '{}' .",
                         t.nome_exibicao()
                     ),
                 });
@@ -1811,7 +1811,7 @@ impl Verificador {
     /// `NOME(arg1, arg2, ...)` ou `NOME` como comando (procedimento) ou
     /// dentro de uma expressão (função, ver [`Self::tipo_de_expr`]) —
     /// verifica que `nome` existe, é da `categoria_esperada`, resolve
-    /// **qual sobrecarga** usar (seção 10.5) com base nos tipos dos
+    /// **qual sobrecarga** usar com base nos tipos dos
     /// argumentos, e confere que os argumentos são compatíveis em
     /// quantidade e tipo com os parâmetros da sobrecarga escolhida.
     /// Retorna o tipo de retorno (só relevante para função).
@@ -1825,7 +1825,7 @@ impl Verificador {
         let categoria_opt = self.tabela.buscar(nome).map(|s| s.categoria.clone());
 
         // Chamada INDIRETA através de uma variável de tipo 'função'
-        // (seção 10.5.3) — 'RESPOSTA(args)' onde 'RESPOSTA' guarda uma
+        // — 'RESPOSTA(args)' onde 'RESPOSTA' guarda uma
         // referência a função, não o nome de uma sub-rotina declarada.
         // O tipo de retorno não é conhecido estaticamente (só os
         // parâmetros entram em `TipoResolvido::Funcao`) — o resultado é
@@ -1839,7 +1839,7 @@ impl Verificador {
         // "chamar uma função". Usá-la como comando solto
         // ('RESPOSTA()', via Comando::ChamadaProcedimento) só descarta
         // o retorno — mesma permissividade já adotada para
-        // 'OBJETO.MÉTODO()' como comando (seção 10.4), não é erro.
+        // 'OBJETO.MÉTODO()' como comando, não é erro.
         if let Some(CategoriaSimbolo::Var(TipoResolvido::Funcao { parametros })) = &categoria_opt {
             let parametros = parametros.clone();
             let tipos_argumentos: Vec<Option<TipoResolvido>> =
@@ -1848,7 +1848,7 @@ impl Verificador {
                 self.erros.push(ErroSemantico {
                     linha,
                     mensagem: format!(
-                        "'{nome}' espera {} argumento(s), mas a chamada tem {} (seção 10.5.3).",
+                        "'{nome}' espera {} argumento(s), mas a chamada tem {} .",
                         parametros.len(),
                         tipos_argumentos.len()
                     ),
@@ -1862,7 +1862,7 @@ impl Verificador {
                             linha,
                             mensagem: format!(
                                 "argumento {} de '{nome}' deveria ser '{}', mas é '{}' \
-                                 (seção 10.5.3).",
+                                 .",
                                 i + 1,
                                 esperado.nome_exibicao(),
                                 recebido.nome_exibicao()
@@ -1878,7 +1878,7 @@ impl Verificador {
             Some(CategoriaSimbolo::SubRotina(a)) => a,
             Some(CategoriaSimbolo::Var(_)) => {
                 // Pode ser chamada recursiva de uma função pelo próprio nome
-                // (seção 9.2, estilo Pascal) — o escopo atual declara o nome
+                // (estilo Pascal) — o escopo atual declara o nome
                 // como 'Var' (variável de retorno), mas nos escopos externos
                 // está a 'SubRotina' correspondente. Tenta encontrá-la.
                 match self.tabela.buscar_em_escopos_externos(nome) {
@@ -1999,13 +1999,13 @@ impl Verificador {
         assinatura.tipo_retorno
     }
 
-    /// Escolhe, entre `candidatas` (todas as sobrecargas de `nome`,
-    /// seção 10.5), a que deve ser usada para uma chamada com
+    /// Escolhe, entre `candidatas` (todas as sobrecargas de `nome`), a
+    /// que deve ser usada para uma chamada com
     /// `tipos_argumentos` (já avaliados — `None` num índice significa
     /// que aquele argumento já teve erro próprio, reportado em outro
     /// lugar). Caso comum (`candidatas.len() == 1`): retorna a única
-    /// sem nenhuma lógica de resolução, preservando o comportamento de
-    /// antes da Fase 5 byte a byte.
+    /// sem nenhuma lógica de resolução adicional, mantendo o mesmo
+    /// comportamento simples esperado nesse caso.
     ///
     /// Com múltiplas candidatas: filtra por aridade exata; dentre essas,
     /// escolhe a que aceita **todos** os argumentos com
@@ -2045,7 +2045,7 @@ impl Verificador {
                 linha,
                 mensagem: format!(
                     "nenhuma versão de '{nome}' aceita {aridade_chamada} argumento(s) — as \
-                     versões disponíveis (seção 10.5) esperam {} argumento(s), \
+                     versões disponíveis  esperam {} argumento(s), \
                      respectivamente.",
                     aridades.join(", ")
                 ),
@@ -2093,7 +2093,7 @@ impl Verificador {
                     linha,
                     mensagem: format!(
                         "nenhuma versão de '{nome}' com {aridade_chamada} argumento(s) aceita \
-                         os tipos ({}) — confira as sobrecargas disponíveis (seção 10.5).",
+                         os tipos ({}) — confira as sobrecargas disponíveis .",
                         tipos_chamada.join(", ")
                     ),
                 });
@@ -2103,7 +2103,7 @@ impl Verificador {
                 self.erros.push(ErroSemantico {
                     linha,
                     mensagem: format!(
-                        "a chamada a '{nome}' é ambígua: mais de uma sobrecarga (seção 10.5) \
+                        "a chamada a '{nome}' é ambígua: mais de uma sobrecarga  \
                          com {aridade_chamada} argumento(s) aceita os tipos fornecidos. \
                          Adicione um cast explícito a um dos argumentos para desambiguar."
                     ),
@@ -2114,11 +2114,11 @@ impl Verificador {
     }
 
     // =================================================================================
-    // Verificação de expressões (seção 5) e l-values (campo/índice)
+    // Verificação de expressões e l-values (campo/índice)
     // =================================================================================
 
     /// Calcula o tipo de `expr` no contexto de uma atribuição/passagem
-    /// onde o tipo ESPERADO é `TipoResolvido::Funcao` (seção 10.5.3) —
+    /// onde o tipo ESPERADO é `TipoResolvido::Funcao` —
     /// usado por `Comando::Atribuicao` quando o destino é desse tipo.
     /// Intercepta os dois casos especiais de "referência a função sem
     /// chamar": um identificador sozinho (`SOMATORIO`) referenciando
@@ -2195,10 +2195,9 @@ impl Verificador {
 
     /// Valida que `nome` (sub-rotina ou método, já com suas `assinaturas`
     /// candidatas) pode ser atribuído a uma variável de tipo `função`
-    /// cujos parâmetros esperados são `parametros_esperados` (seção
-    /// 10.5.3): exatamente uma assinatura (mais de uma = sobrecarregado
-    /// = erro de ambiguidade explícito, mesmo padrão da seção 10.5),
-    /// precisa ser `função` (não `procedimento`), e os tipos de
+    /// cujos parâmetros esperados são `parametros_esperados`: exatamente
+    /// uma assinatura (mais de uma = sobrecarregado = erro de ambiguidade
+    /// explícito) precisa ser `função` (não `procedimento`), e os tipos de
     /// parâmetro precisam bater exatamente, na ordem (sem coerção —
     /// mesma aridade e mesmos tipos, não só compatíveis: o objetivo é a
     /// referência poder ser chamada depois com qualquer argumento que
@@ -2215,9 +2214,9 @@ impl Verificador {
             self.erros.push(ErroSemantico {
                 linha,
                 mensagem: format!(
-                    "'{nome}' está sobrecarregado (seção 10.5) — não pode ser atribuído a \
+                    "'{nome}' está sobrecarregado  — não pode ser atribuído a \
                      uma variável de tipo função, já que não há como saber qual sobrecarga \
-                     se quer referenciar (seção 10.5.3)."
+                     se quer referenciar ."
                 ),
             });
             return Some(TipoResolvido::Funcao { parametros: parametros_esperados.to_vec() });
@@ -2228,7 +2227,7 @@ impl Verificador {
                 linha,
                 mensagem: format!(
                     "'{nome}' é um procedimento (não retorna valor) — uma variável de tipo \
-                     função só pode referenciar funções (seção 10.5.3)."
+                     função só pode referenciar funções ."
                 ),
             });
             return Some(TipoResolvido::Funcao { parametros: parametros_esperados.to_vec() });
@@ -2244,7 +2243,7 @@ impl Verificador {
                 linha,
                 mensagem: format!(
                     "'{nome}' tem assinatura função({}) — incompatível com função({}) \
-                     esperado (seção 10.5.3).",
+                     esperado .",
                     tipos_reais_nomes.join(", "),
                     tipos_esperados_nomes.join(", ")
                 ),
@@ -2267,7 +2266,7 @@ impl Verificador {
             Expr::Logico(_) => Some(TipoResolvido::Logico),
 
             Expr::Variavel(lvalue) => {
-                // Caso especial (seção 10.4): se o ÚLTIMO acesso da cadeia
+                // Caso especial: se o ÚLTIMO acesso da cadeia
                 // é uma chamada de método e esse método é um
                 // 'procedimento' (sem retorno), usar isso como valor de
                 // expressão é um erro distinto de "identificador não
@@ -2284,7 +2283,7 @@ impl Verificador {
                             mensagem: format!(
                                 "'{}' é um procedimento (sem retorno) — não pode ser \
                                  usado como valor dentro de uma expressão. Procedimentos \
-                                 só podem ser chamados como comando isolado (seção 9.7/10.4).",
+                                 só podem ser chamados como comando isolado .",
                                 nome_metodo
                             ),
                         });
@@ -2296,7 +2295,7 @@ impl Verificador {
 
             Expr::Chamada { nome, argumentos, linha } => {
                 // Pode ser uma função do usuário OU uma função pré-definida
-                // (matemática, seção 5.6, ou de texto, seção 20.2) — estas
+                // (matemática, ou de texto) — estas
                 // últimas não entram na tabela de símbolos, então uma
                 // chamada a 'raizq'/'tamanho'/etc. não declarada pelo
                 // usuário não gera erro de "não declarado" aqui.
@@ -2364,7 +2363,7 @@ impl Verificador {
         }
     }
 
-    /// Aplica a regra de encapsulamento (seção 10.4.1) a um acesso a
+    /// Aplica a regra de encapsulamento a um acesso a
     /// `nome_membro` (campo ou método), declarado com `visibilidade` na
     /// classe `classe_dono` (a classe que efetivamente o declarou,
     /// subindo a cadeia de herança — não necessariamente a classe da
@@ -2423,8 +2422,8 @@ impl Verificador {
     }
 
     /// Implementação genérica da resolução de um nome de membro através
-    /// da árvore de herança (Fase 6 — múltiplas bases diretas por
-    /// classe, sem herança virtual): `extrair` decide o que conta como
+    /// da árvore de herança (múltiplas bases diretas por classe, sem
+    /// herança virtual): `extrair` decide o que conta como
     /// "achado" numa única [`InfoClasse`] (campo, ou lista de
     /// sobrecargas de método). Regra de prioridade: se a própria classe
     /// em `nome_classe` declara o nome diretamente, usa isso sem nem
@@ -2491,10 +2490,10 @@ impl Verificador {
     }
 
     /// Retorna o [`InfoCampo`] de `nome_campo`, considerando toda a
-    /// árvore de herança a partir de `nome_classe` (seção 10.1/10.4,
-    /// Fase 6), junto com o nome (em minúsculas) da classe que
+    /// árvore de herança a partir de `nome_classe`,
+    /// junto com o nome (em minúsculas) da classe que
     /// efetivamente o **declarou** — necessário para a regra de
-    /// encapsulamento (seção 10.4.1): um campo `seção_protegida` é
+    /// encapsulamento: um campo `seção_protegida` é
     /// acessível de dentro de qualquer subclasse da classe que o
     /// declarou, não só da classe que o programador está acessando.
     fn buscar_campo_com_heranca(&self, nome_classe: &str, nome_campo: &str) -> ResolucaoMembro<InfoCampo> {
@@ -2503,7 +2502,7 @@ impl Verificador {
 
     /// Como [`Verificador::buscar_campo_com_heranca`], mas para
     /// métodos — com uma diferença importante por causa de sobrecarga
-    /// (seção 10.5): o "achado" em cada classe é a lista **completa**
+    ///: o "achado" em cada classe é a lista **completa**
     /// de sobrecargas de `nome_metodo` ali (nunca combina sobrecargas
     /// de classes diferentes entre si — mesma regra simplificada usada
     /// em C++ na ausência de `using Base::método;`); [`Self::
@@ -2521,9 +2520,9 @@ impl Verificador {
     }
 
     /// Verifica os argumentos de uma chamada (sub-rotina solta ou
-    /// método, seção 9.4/10.4) contra `parametros` já resolvidos, mas
+    /// método) contra `parametros` já resolvidos, mas
     /// para quando os tipos dos argumentos **já foram calculados**
-    /// antes (ex.: para resolver qual sobrecarga usar, seção 10.5,
+    /// antes (ex.: para resolver qual sobrecarga usar,
     /// antes de saber contra quais `parametros` validar) — evita chamar
     /// [`Self::tipo_de_expr`] uma segunda vez sobre os mesmos
     /// argumentos, o que duplicaria quaisquer erros que o cálculo do
@@ -2579,7 +2578,7 @@ impl Verificador {
 
 
     /// Calcula o tipo de um [`LValue`] (`NOME`, `NOME.CAMPO`, `NOME[i]`,
-    /// encadeados — seção 4.4/4.5), reportando identificador não declarado,
+    /// encadeados ), reportando identificador não declarado,
     /// categoria errada (ex.: chamar uma função sem `()` como variável),
     /// acesso de campo em algo que não é `registro`, campo inexistente,
     /// índice em algo que não é `conjunto`, número de índices diferente do
@@ -2588,7 +2587,7 @@ impl Verificador {
         let simbolo = match self.tabela.buscar(&lvalue.nome) {
             Some(s) => s.clone(),
             None => {
-                // Constantes pré-definidas (seção 5.6) — não entram na tabela
+                // Constantes pré-definidas — não entram na tabela
                 // de símbolos, mas são sempre do tipo real.
                 let nome_lower = lvalue.nome.to_lowercase();
                 if (nome_lower == "p_pi" || nome_lower == "p_euler" || nome_lower == "p_infinito")
@@ -2617,7 +2616,7 @@ impl Verificador {
             }
         };
 
-        // Qualificador de escopo (Fase 6 — seção 10.1/10.6.1):
+        // Qualificador de escopo:
         // 'CLS_BASE..NOME.CAMPO' desambigua de qual base resolver o
         // PRIMEIRO acesso da cadeia. Valida aqui que a base indicada é
         // de fato uma ancestral (direta ou indireta) do tipo declarado
@@ -2634,7 +2633,7 @@ impl Verificador {
                             linha: lvalue.linha,
                             mensagem: format!(
                                 "'{base}' não é uma classe-base de '{nome_classe}' — a \
-                                 qualificação 'CLS_BASE..{}' (Fase 6, seção 10.1/10.6.1) só \
+                                 qualificação 'CLS_BASE..{}' (Fase 6) só \
                                  faz sentido quando 'CLS_BASE' é, direta ou indiretamente, \
                                  uma das classes-base de '{nome_classe}'.",
                                 lvalue.nome
@@ -2645,7 +2644,7 @@ impl Verificador {
                     if !self.info_classes.contains_key(&base.to_lowercase()) {
                         self.erros.push(ErroSemantico {
                             linha: lvalue.linha,
-                            mensagem: format!("'{base}' não é uma classe declarada (seção 10.1)."),
+                            mensagem: format!("'{base}' não é uma classe declarada ."),
                         });
                         return None;
                     }
@@ -2655,7 +2654,7 @@ impl Verificador {
                         linha: lvalue.linha,
                         mensagem: format!(
                             "a qualificação 'CLS_BASE..{}' só se aplica a instâncias de \
-                             classe (Fase 6, seção 10.1/10.6.1) — '{}' é '{}'.",
+                             classe (Fase 6) — '{}' é '{}'.",
                             lvalue.nome,
                             lvalue.nome,
                             outro.nome_exibicao()
@@ -2668,7 +2667,7 @@ impl Verificador {
 
         for (i, acesso) in lvalue.acessos.iter().enumerate() {
             // A partir de qual classe resolver este acesso: a base
-            // qualificada (Fase 6), só no primeiro acesso da cadeia; em
+            // qualificada, só no primeiro acesso da cadeia; em
             // qualquer outro caso, a classe do tipo atual normalmente.
             let classe_partida_override =
                 if i == 0 { lvalue.qualificador_base.as_deref() } else { None };
@@ -2681,7 +2680,7 @@ impl Verificador {
                                 self.erros.push(ErroSemantico {
                                     linha: lvalue.linha,
                                     mensagem: format!(
-                                        "o tipo de '{}' não tem campo '{}' (seção 4.4).",
+                                        "o tipo de '{}' não tem campo '{}' .",
                                         lvalue.nome, nome_campo
                                     ),
                                 });
@@ -2709,7 +2708,7 @@ impl Verificador {
                                         "'{}' é ambíguo em '{}' — existe em mais de uma \
                                          classe-base ({}) sem qualificação. Use \
                                          'CLS_BASE..{}' para indicar de qual base vem \
-                                         (Fase 6 — herança múltipla, seção 10.1).",
+                                         (Fase 6 — herança múltipla).",
                                         nome_campo,
                                         classe_origem,
                                         doadoras.join(", "),
@@ -2722,7 +2721,7 @@ impl Verificador {
                                 self.erros.push(ErroSemantico {
                                     linha: lvalue.linha,
                                     mensagem: format!(
-                                        "a classe '{}' não tem campo '{}' (seção 10.1/10.4).",
+                                        "a classe '{}' não tem campo '{}' .",
                                         classe_origem, nome_campo
                                     ),
                                 });
@@ -2782,7 +2781,7 @@ impl Verificador {
                         match self.buscar_metodo_com_heranca(&classe_origem, nome_metodo) {
                             ResolucaoMembro::Encontrado(candidatos, classe_dono) => {
                                 // Avalia os argumentos uma única vez antes de
-                                // resolver qual sobrecarga usar (seção 10.5) —
+                                // resolver qual sobrecarga usar —
                                 // mesmo princípio de 'verificar_chamada'.
                                 let tipos_argumentos: Vec<Option<TipoResolvido>> =
                                     argumentos.iter().map(|a| self.tipo_de_expr(a)).collect();
@@ -2820,7 +2819,7 @@ impl Verificador {
                                     Some(tr) => tipo_atual = tr,
                                     None if i == lvalue.acessos.len() - 1 => {
                                         // Último acesso da cadeia, sem retorno ('procedimento'):
-                                        // válido como comando solto (seção 9.7/10.4). Quem
+                                        // válido como comando solto. Quem
                                         // chama esta função em contexto de expressão
                                         // (Expr::Variavel) decide se um retorno 'None' aqui é
                                         // aceitável ou não — não é responsabilidade desta
@@ -2852,7 +2851,7 @@ impl Verificador {
                                         "'{}' é ambíguo em '{}' — existe em mais de uma \
                                          classe-base ({}) sem qualificação. Use \
                                          'CLS_BASE..{}(...)' para indicar de qual base vem \
-                                         (Fase 6 — herança múltipla, seção 10.1).",
+                                         (Fase 6 — herança múltipla).",
                                         nome_metodo,
                                         classe_origem,
                                         doadoras.join(", "),
@@ -2868,7 +2867,7 @@ impl Verificador {
                                 self.erros.push(ErroSemantico {
                                     linha: lvalue.linha,
                                     mensagem: format!(
-                                        "a classe '{}' não tem método '{}' (seção 10.3/10.4).",
+                                        "a classe '{}' não tem método '{}' .",
                                         classe_origem, nome_metodo
                                     ),
                                 });
@@ -2903,7 +2902,7 @@ impl Verificador {
     }
 }
 
-/// Mensagem didática (seção 15.3) para um erro de resolução de tipo.
+/// Mensagem didática para um erro de resolução de tipo.
 fn erro_resolucao_tipo(
     nome_var_ou_campo: &str,
     erro: ErroResolucaoTipo,
@@ -2950,8 +2949,8 @@ fn nome_tipo_em_erro(tipo: &Tipo) -> Option<String> {
 /// "Acha" um vetor de parâmetros (onde cada [`ParametroResolvido`] pode
 /// agrupar vários nomes do mesmo tipo, ex.: `X, Y : inteiro`) para uma
 /// lista com um tipo por parâmetro real, na ordem declarada — facilita
-/// comparar/percorrer posição a posição (usado tanto para sobrecarga,
-/// seção 10.5, quanto já era feito ad-hoc em `verificar_chamada`/
+/// comparar/percorrer posição a posição (usado tanto para sobrecarga
+/// quanto já era feito ad-hoc em `verificar_chamada`/
 /// `verificar_argumentos_ja_avaliados`).
 fn tipos_expandidos(assinatura: &AssinaturaSubRotina) -> Vec<&TipoResolvido> {
     assinatura
@@ -2974,7 +2973,7 @@ fn mesma_lista_de_tipos(a: &AssinaturaSubRotina, b: &AssinaturaSubRotina) -> boo
     ta.len() == tb.len() && ta.iter().zip(tb.iter()).all(|(x, y)| x == y)
 }
 
-/// Compara duas assinaturas para fins de override (seção 10.6):
+/// Compara duas assinaturas para fins de override:
 /// mesma categoria (`procedimento`/`função`), mesma aridade, mesmo tipo
 /// de retorno e mesmo tipo (e modo de passagem) em cada parâmetro, na
 /// mesma ordem. **Nomes de parâmetro não importam** — `EXECUTA(X :
@@ -2994,7 +2993,7 @@ fn assinaturas_compativeis_para_override(a: &AssinaturaSubRotina, b: &Assinatura
 }
 
 /// Mensagem didática padrão para uso de um identificador nunca declarado
-/// (seção 15.3).
+///.
 fn erro_identificador_nao_declarado(nome: &str, linha: usize) -> ErroSemantico {
     ErroSemantico {
         linha,
@@ -3028,12 +3027,12 @@ fn nome_lvalue(lvalue: &LValue) -> String {
 }
 
 /// `true` para `inteiro`/`real`/`generico` — tipos aceitáveis como variável
-/// de controle de um `para` (seção 8).
+/// de controle de um `para`.
 fn numerico_para_controle(t: &TipoResolvido) -> bool {
     matches!(t, TipoResolvido::Inteiro | TipoResolvido::Real | TipoResolvido::Generico)
 }
 
-/// Converte um [`TipoPrimitivo`] (usado em *casts*, seção 10.5.1) para
+/// Converte um [`TipoPrimitivo`] (usado em *casts*) para
 /// [`TipoResolvido`].
 fn tipo_primitivo_para_resolvido(tp: TipoPrimitivo) -> TipoResolvido {
     match tp {
@@ -3046,7 +3045,7 @@ fn tipo_primitivo_para_resolvido(tp: TipoPrimitivo) -> TipoResolvido {
 }
 
 /// Se `nome` (case-insensitive) corresponde a uma função pré-definida —
-/// matemática (seção 5.6) ou de texto (seção 20.2) —, retorna seu tipo de
+/// matemática ou de texto —, retorna seu tipo de
 /// retorno. Usado para que chamar `raizq(...)`/`tamanho(...)`/etc. não gere
 /// falso erro de "não declarado", *e* para que o tipo resultante seja o
 /// correto (não uma aproximação genérica) — importante para detectar, por
@@ -3054,8 +3053,8 @@ fn tipo_primitivo_para_resolvido(tp: TipoPrimitivo) -> TipoResolvido {
 /// erroneamente exigir um cast.
 ///
 /// A verificação completa de aridade/tipos dos *argumentos* dessas funções
-/// continua sendo um refinamento futuro (ver seção 20 da especificação);
-/// aqui garantimos apenas o tipo de retorno.
+/// continua sendo um refinamento futuro; aqui garantimos apenas o tipo
+/// de retorno.
 fn tipo_retorno_predefinida(nome: &str) -> Option<TipoResolvido> {
     const RETORNAM_INTEIRO: &[&str] = &[
         "piso", "teto", "arredonda", "trunca", "sinal", "tamanho", "posição",
@@ -3074,9 +3073,9 @@ fn tipo_retorno_predefinida(nome: &str) -> Option<TipoResolvido> {
     // de execução (inteiro com inteiro -> inteiro; senão -> real) — não dá
     // para saber estaticamente sem inspecionar os argumentos. Aproximação
     // aceitável: tratá-las como 'real' aqui (compatibilidade direta com
-    // 'inteiro' via coerção numérica, seção 10.5.1 — nunca exige cast).
+    // 'inteiro' via coerção numérica — nunca exige cast).
     const RETORNAM_REAL_APROXIMADO: &[&str] = &["abs", "máximo", "mínimo"];
-    // Funções de cast (seção 10.5) também podem aparecer como Expr::Chamada
+    // Funções de cast também podem aparecer como Expr::Chamada
     // quando o parser não as reconhece como tipo primitivo (não deveria
     // ocorrer, mas mantemos por segurança) — seu tipo de retorno é o
     // próprio nome do tipo.
@@ -3167,7 +3166,6 @@ fim"#,
         assert!(r.erros[0].mensagem.contains("já foi declarado"));
         assert!(r.erros[0].mensagem.contains("NOTA"));
         assert!(r.erros[0].mensagem.contains("nota"));
-        assert!(r.erros[0].mensagem.contains("seção 1.3"));
     }
 
     #[test]
@@ -3245,7 +3243,7 @@ fim"#,
 
     #[test]
     fn procedimento_com_parametros_padrao_a() {
-        // CALC_FAT_V2 (✅ v0.10: marcador 'ref')
+        // CALC_FAT_V2 (marcador 'ref')
         let r = verificar_fonte(
             r#"programa P
   procedimento FATORIAL(N : inteiro; ref FAT : inteiro)
@@ -3335,7 +3333,7 @@ fim"#,
 
     #[test]
     fn registro_e_conjunto_anonimos_em_var() {
-        // Tipos declarados inline (sem 'tipo NOME = ...'), seção 4.4/4.5.
+        // Tipos declarados inline (sem 'tipo NOME = ...').
         let r = verificar_fonte(
             r#"programa P
 var
@@ -3411,7 +3409,7 @@ fim"#,
 
     #[test]
     fn sub_rotina_aninhada_compartilha_escopo_do_pai() {
-        // Procedimento aninhado dentro de outro, sem erros (seção 9.6).
+        // Procedimento aninhado dentro de outro, sem erros.
         let r = verificar_fonte(
             r#"programa P
   procedimento EXTERNO(N : inteiro)
@@ -3821,7 +3819,7 @@ fim"#,
     #[test]
     fn chamada_a_funcao_predefinida_nao_gera_erro() {
         // 'raizq' não foi declarada pelo usuário, mas é pré-definida
-        // (seção 5.6) — não deve gerar "não declarado".
+        // — não deve gerar "não declarado".
         let r = verificar_fonte(
             r#"programa P
 var
@@ -3836,7 +3834,7 @@ fim"#,
     #[test]
     fn tamanho_retorna_inteiro_sem_exigir_cast() {
         // 'tamanho' deve ser inferido como 'inteiro' diretamente — antes
-        // da correção (seção 20.2), a aproximação genérica 'real' faria
+        // da correção, a aproximação genérica 'real' faria
         // este teste falhar exigindo cast.
         let r = verificar_fonte(
             r#"programa P
@@ -3929,7 +3927,7 @@ fim"#,
         // Referência "para a frente" — o rótulo aparece depois do 'ir_para'
         // no código, mas ainda está no mesmo bloco da sub-rotina.
         // (Nome do rótulo não pode ser 'FIM': é a palavra-chave 'fim' em
-        // qualquer grafia, PEPPE é case-insensitive — seção 1.3.)
+        // qualquer grafia, PEPPE é case-insensitive .)
         let r = verificar_fonte(
             r#"programa P
 início
@@ -3959,7 +3957,7 @@ fim"#,
 
     #[test]
     fn rotulo_dentro_de_se_e_visivel_para_ir_para_fora() {
-        // Escopo de rótulo é a sub-rotina inteira (seção 8), não o bloco
+        // Escopo de rótulo é a sub-rotina inteira, não o bloco
         // aninhado onde ele aparece.
         let r = verificar_fonte(
             r#"programa P
@@ -4016,7 +4014,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10) — Fase 1: classe sem herança
+    // Programação Orientada a Objetos: classe sem herança
     // =====================================================================================
 
     #[test]
@@ -4189,7 +4187,7 @@ fim"#,
         // Equivalente ao núcleo de POLIFORMISMO_UNIVERSAL_INCLUSÃO:
         // 'REFERENCIA <- OBJ2' onde REFERENCIA é da classe-base e OBJ2 é
         // da derivada. Nome não pode ser 'REF': colide com a
-        // palavra-chave reservada 'ref' (seção 9.3, case-insensitive).
+        // palavra-chave reservada 'ref' (case-insensitive).
         let r = verificar_fonte(
             r#"programa P
 tipo
@@ -4308,7 +4306,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10) — Fase 2: encapsulamento aplicado
+    // Programação Orientada a Objetos: encapsulamento aplicado
     // =====================================================================================
 
     #[test]
@@ -4503,7 +4501,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10.6) — virtual/sobrepor
+    // Programação Orientada a Objetos — virtual/sobrepor
     // =====================================================================================
 
     #[test]
@@ -4683,7 +4681,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10.5) — Fase 5: sobrecarga ad-hoc
+    // Programação Orientada a Objetos: sobrecarga ad-hoc
     // =====================================================================================
 
     #[test]
@@ -4873,7 +4871,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10.1/10.6.1) — Fase 6: herança múltipla
+    // Programação Orientada a Objetos: herança múltipla
     // =====================================================================================
 
     #[test]
@@ -5122,7 +5120,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Funções como valores de primeira classe (seção 10.5.3)
+    // Funções como valores de primeira classe
     // =====================================================================================
 
     #[test]

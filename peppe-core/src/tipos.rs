@@ -1,9 +1,9 @@
-//! Tipos *resolvidos* e regras de compatibilidade/coerção (seção 10.5),
-//! usados pelo verificador semântico (`checker.rs`, seção 15).
+//! Tipos *resolvidos* e regras de compatibilidade/coerção,
+//! usados pelo verificador semântico (`checker.rs`).
 //!
 //! A AST (`ast::Tipo`) pode conter [`ast::Tipo::Nomeado`] — uma referência
 //! por nome a um tipo definido em `tipo NOME = ...`, que só existe "pelo
-//! nome" até a fase de verificação semântica (seção 4.3). [`TipoResolvido`]
+//! nome" até a fase de verificação semântica. [`TipoResolvido`]
 //! é a versão "achatada": toda referência nomeada foi substituída pela
 //! definição real (`registro`, `conjunto`, primitivo ou `generico`),
 //! recursivamente — [`resolver_tipo`] faz essa transformação, detectando
@@ -11,9 +11,9 @@
 //!
 //! Este módulo também define:
 //! - [`compatibilidade`] — para atribuições, parâmetros, retornos, `leia`,
-//!   `escreva`, `dimensione`, ramos de `caso` etc. (seção 10.5.1).
+//!   `escreva`, `dimensione`, ramos de `caso` etc..
 //! - [`tipo_resultado_binario`] / [`tipo_resultado_unario`] — para o tipo
-//!   resultante de cada operador (seções 5.2/5.3/5.4/5.5 e 10.5.2,
+//!   resultante de cada operador (ex.: `inteiro + inteiro` = `inteiro`,
 //!   concatenação de `cadeia` com `+`).
 
 use crate::ast::{OpBinario, OpUnario, Tipo, TipoPrimitivo};
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 // =====================================================================================
 
 /// Um tipo PEPPE já "achatado" — sem nenhuma referência pendente a um nome
-/// definido via `tipo NOME = ...` (seção 4.3/4.4/4.5).
+/// definido via `tipo NOME = ...`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TipoResolvido {
     Inteiro,
@@ -32,7 +32,7 @@ pub enum TipoResolvido {
     Cadeia,
     Caractere,
     Logico,
-    /// Tipo `generico` (seção 10.5, fase 2). Para esta versão do
+    /// Tipo `generico` (fase 2). Para esta versão do
     /// verificador, `generico` é tratado de forma permissiva: compatível
     /// com qualquer outro tipo (ver [`compatibilidade`]) — uma
     /// simplificação até que a verificação de tipos paramétricos seja
@@ -47,17 +47,17 @@ pub enum TipoResolvido {
         dimensoes: Vec<Option<(crate::ast::Expr, crate::ast::Expr)>>,
         elemento: Box<TipoResolvido>,
     },
-    /// Tipo `classe` (seção 10.1) — diferente de `registro`/`conjunto`,
+    /// Tipo `classe` — diferente de `registro`/`conjunto`,
     /// usa tipagem **nominal** (duas classes com os mesmos campos não são
     /// o mesmo tipo): a igualdade e a compatibilidade dependem do `nome`,
     /// não da estrutura. `heranca` guarda os nomes das classes-base
-    /// **diretas** (vazio se não houver — Fase 6, herança múltipla
+    /// **diretas** (vazio se não houver, herança múltipla
     /// estilo C++ sem `virtual`) — usado por [`e_subclasse_de`] para
-    /// verificar compatibilidade através da hierarquia (seção 10.4,
-    /// `REF ← OBJ2` quando `REF` é de uma classe-base, direta ou
+    /// verificar compatibilidade através da hierarquia (`REF ← OBJ2`
+    /// quando `REF` é de uma classe-base, direta ou
     /// indireta por qualquer caminho, e `OBJ2` é de uma classe derivada).
     Classe { nome: String, heranca: Vec<String> },
-    /// Tipo `função(tipo1, tipo2, ...)` (seção 10.5.3) — referência a
+    /// Tipo `função(tipo1, tipo2, ...)` — referência a
     /// função de primeira classe. `parametros` são só os tipos dos
     /// parâmetros (já resolvidos); o tipo de retorno é livre e por
     /// isso não entra aqui. Compatibilidade entre dois `Funcao` exige
@@ -74,7 +74,7 @@ pub struct CampoResolvido {
 }
 
 impl TipoResolvido {
-    /// Nome do tipo para mensagens de erro didáticas (seção 15.3). Para
+    /// Nome do tipo para mensagens de erro didáticas. Para
     /// `registro`/`conjunto` **anônimos** (declarados inline, sem passar por
     /// `tipo NOME = ...`), retorna uma descrição estrutural; o chamador que
     /// conhece o nome do alias original (ex.: `cad_aluno`) deve preferir
@@ -101,14 +101,14 @@ impl TipoResolvido {
 }
 
 // =====================================================================================
-// Resolução de `Tipo::Nomeado` (seção 4.3)
+// Resolução de `Tipo::Nomeado`
 // =====================================================================================
 
 /// Erro ao resolver uma referência de tipo (`Tipo::Nomeado`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErroResolucaoTipo {
     /// `tipo X = ALGUM_NOME`, onde `ALGUM_NOME` não foi declarado em nenhum
-    /// `tipo ALGUM_NOME = ...` (case-insensitive — seção 1.3).
+    /// `tipo ALGUM_NOME = ...` (case-insensitive ).
     TipoNaoDefinido(String),
     /// Cadeia de aliases que se referenciam ciclicamente (ex.: `tipo A = B`
     /// / `tipo B = A`). A lista contém os nomes (grafia original) na ordem
@@ -119,7 +119,7 @@ pub enum ErroResolucaoTipo {
 /// Resolve `tipo` para [`TipoResolvido`], substituindo recursivamente toda
 /// referência [`Tipo::Nomeado`] pela definição correspondente em
 /// `tabela_tipos` (mapa: nome em minúsculas → `(grafia original,
-/// definição)` — case-insensitive, seção 1.3).
+/// definição)` — case-insensitive).
 pub fn resolver_tipo(
     tipo: &Tipo,
     tabela_tipos: &HashMap<String, (String, Tipo)>,
@@ -171,7 +171,7 @@ fn resolver_tipo_rec(
         // tem identidade nominal (precisa do nome pelo qual foi declarada
         // em 'tipo NOME = classe ...', que esta função não recebe) e
         // membros que exigem uma estrutura própria no verificador
-        // semântico (`InfoClasse`, seção 10). O verificador resolve
+        // semântico (`InfoClasse`). O verificador resolve
         // `Tipo::Classe`/`Tipo::Nomeado` apontando para uma classe
         // diretamente a partir de sua tabela `info_classes`, sem passar
         // por aqui.
@@ -217,7 +217,7 @@ fn resolver_tipo_rec(
 }
 
 // =====================================================================================
-// Compatibilidade / coerção (seção 10.5.1)
+// Compatibilidade / coerção
 // =====================================================================================
 
 /// Resultado da verificação de compatibilidade entre um valor de tipo `de`
@@ -227,16 +227,16 @@ fn resolver_tipo_rec(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Compatibilidade {
     /// Tipos idênticos, ou conversão implícita permitida pela tabela de
-    /// coerção (seção 10.5.1) — ex.: `inteiro -> real`, `caractere -> cadeia`.
+    /// coerção — ex.: `inteiro -> real`, `caractere -> cadeia`.
     Direta,
     /// `de` pode se tornar `para`, mas exige *cast* explícito —
-    /// `(para) valor` ou `para(valor)` (seção 10.5.1).
+    /// `(para) valor` ou `para(valor)`.
     PrecisaCast,
     /// Nenhuma conversão é permitida entre `de` e `para`.
     Incompativel,
 }
 
-/// Tabela de coerção da seção 10.5.1:
+/// Tabela de coerção entre tipos:
 ///
 /// | de \ para | inteiro | real | cadeia | caractere | lógico |
 /// |---|---|---|---|---|---|
@@ -246,7 +246,7 @@ pub enum Compatibilidade {
 /// | caractere | incompatível | incompatível | **direta** | = | incompatível |
 /// | lógico | incompatível | incompatível | incompatível | incompatível | = |
 ///
-/// `generico` (✅ simplificação v1, ver [`TipoResolvido::Generico`]) é
+/// `generico` (uma simplificação atual, ver [`TipoResolvido::Generico`]) é
 /// compatível (direta) com qualquer tipo, nos dois sentidos.
 pub fn compatibilidade(de: &TipoResolvido, para: &TipoResolvido) -> Compatibilidade {
     use Compatibilidade::*;
@@ -256,7 +256,7 @@ pub fn compatibilidade(de: &TipoResolvido, para: &TipoResolvido) -> Compatibilid
         return Direta;
     }
 
-    // 'Funcao' (seção 10.5.3) não tem braço explícito abaixo: como o
+    // 'Funcao' não tem braço explícito abaixo: como o
     // tipo de retorno não entra em `TipoResolvido::Funcao` (só os
     // parâmetros), dois `Funcao` com os mesmos parâmetros já são
     // estruturalmente IGUAIS (`PartialEq`) e caem no `de == para`
@@ -295,7 +295,7 @@ pub fn compatibilidade(de: &TipoResolvido, para: &TipoResolvido) -> Compatibilid
 
 /// `true` se `nome_filha` é a própria `nome_base`, ou se descende dela
 /// através de **qualquer** caminho na árvore de herança (seção
-/// 10.1/10.4/Fase 6 — múltiplas bases diretas por classe, sem herança
+/// 10.1/10.4 — múltiplas bases diretas por classe, sem herança
 /// virtual: se duas bases diretas compartilham uma base comum mais
 /// acima, cada caminho é percorrido independentemente, sem
 /// deduplicação — mas para esta função isso não importa, já que ela só
@@ -332,7 +332,7 @@ pub fn e_subclasse_de(
 }
 
 /// Como [`compatibilidade`], mas também entende o caso `(Classe, Classe)`
-/// usando a cadeia de herança (seção 10.4): atribuir uma instância de uma
+/// usando a cadeia de herança: atribuir uma instância de uma
 /// classe derivada a uma variável da classe-base (ou da própria classe) é
 /// `Direta`. Para qualquer outro par de tipos, delega para
 /// [`compatibilidade`] sem alteração.
@@ -354,7 +354,7 @@ pub fn compatibilidade_com_heranca(
 }
 
 // =====================================================================================
-// Tipo resultante de operadores (seções 5.2/5.3/5.4/5.5/10.5.2)
+// Tipo resultante de operadores 
 // =====================================================================================
 
 fn numerico(t: &TipoResolvido) -> bool {
@@ -366,7 +366,7 @@ fn textual(t: &TipoResolvido) -> bool {
 }
 
 /// `inteiro` se ambos forem `inteiro`; `real` se algum dos dois for `real`
-/// (promoção usual). `generico` (✅ simplificação v1) também produz
+/// (promoção usual). `generico` (uma simplificação atual) também produz
 /// `generico`, para não travar a verificação antes de tipos paramétricos
 /// existirem de fato.
 fn numerico_resultado(a: &TipoResolvido, b: &TipoResolvido) -> TipoResolvido {
@@ -381,7 +381,7 @@ fn numerico_resultado(a: &TipoResolvido, b: &TipoResolvido) -> TipoResolvido {
 }
 
 /// Representação textual de um [`OpBinario`] para mensagens de erro (seção
-/// 15.3) — sempre na forma canônica (✅ v0.9: `^` para potenciação).
+/// 15.3) — sempre na forma canônica (`^` para potenciação).
 pub fn simbolo_op_binario(op: OpBinario) -> &'static str {
     use OpBinario::*;
     match op {
@@ -405,7 +405,7 @@ pub fn simbolo_op_binario(op: OpBinario) -> &'static str {
 }
 
 /// Tipo do resultado de `esquerda <op> direita`, ou uma mensagem de erro
-/// didática (seção 15.3) se a combinação de tipos não for permitida.
+/// didática se a combinação de tipos não for permitida.
 pub fn tipo_resultado_binario(
     op: OpBinario,
     esquerda: &TipoResolvido,
@@ -426,7 +426,7 @@ pub fn tipo_resultado_binario(
                 Err(format!(
                     "operador '+' não está definido entre '{}' e '{}'. \
                      Para concatenar texto com um número, converta o número \
-                     primeiro com 'cadeia(...)' (seção 10.5.1/10.5.2).",
+                     primeiro com 'cadeia(...)' .",
                     esquerda.nome_exibicao(),
                     direita.nome_exibicao()
                 ))
@@ -447,7 +447,7 @@ pub fn tipo_resultado_binario(
             }
         }
 
-        // '/' sempre retorna 'real' (seção 5.2), mesmo entre dois 'inteiro'.
+        // '/' sempre retorna 'real', mesmo entre dois 'inteiro'.
         Divisao => {
             if numerico(esquerda) && numerico(direita) {
                 if *esquerda == Generico && *direita == Generico {
@@ -465,7 +465,7 @@ pub fn tipo_resultado_binario(
             }
         }
 
-        // 'div'/'mod' exigem 'inteiro' dos dois lados (seção 5.2).
+        // 'div'/'mod' exigem 'inteiro' dos dois lados.
         Div | Mod => {
             if (*esquerda == Inteiro || *esquerda == Generico)
                 && (*direita == Inteiro || *direita == Generico)
@@ -482,7 +482,7 @@ pub fn tipo_resultado_binario(
             }
         }
 
-        // '^' sempre retorna 'real' (mesma assinatura de potência(x,y) — seção 5.6).
+        // '^' sempre retorna 'real' (mesma assinatura de potência(x,y) ).
         Potencia => {
             if numerico(esquerda) && numerico(direita) {
                 if *esquerda == Generico && *direita == Generico {
@@ -541,7 +541,7 @@ pub fn tipo_resultado_binario(
 }
 
 /// Tipo do resultado de `<op> operando` (negação aritmética `-` ou lógica
-/// `.não.`, seção 5.5), ou erro didático.
+/// `.não.`), ou erro didático.
 pub fn tipo_resultado_unario(
     op: OpUnario,
     operando: &TipoResolvido,
@@ -583,7 +583,7 @@ mod tests {
     use crate::ast::{DeclaracaoVar, Expr};
 
     /// Monta uma tabela de tipos a partir de pares `(nome, definição)`,
-    /// normalizando a chave para minúsculas (case-insensitive — seção 1.3).
+    /// normalizando a chave para minúsculas (case-insensitive ).
     fn tabela(defs: Vec<(&str, Tipo)>) -> HashMap<String, (String, Tipo)> {
         defs.into_iter()
             .map(|(nome, def)| (nome.to_lowercase(), (nome.to_string(), def)))
@@ -603,7 +603,7 @@ mod tests {
     #[test]
     fn resolve_alias_simples_case_insensitive() {
         // tipo BIMESTRE = conjunto [1..4] de real
-        // var NOTAS : bimestre   (referência em minúsculas — seção 1.3)
+        // var NOTAS : bimestre   (referência em minúsculas )
         let t = tabela(vec![(
             "BIMESTRE",
             Tipo::Conjunto {

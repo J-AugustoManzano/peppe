@@ -1,9 +1,21 @@
-//! Árvore Sintática Abstrata (AST) da linguagem PEPPE (núcleo estrutural)
+//! Árvore Sintática Abstrata (AST) da linguagem PEPPE — núcleo estrutural
+//! Programação Orientada a Objetos
+//! fica para uma fase posterior (`ast_oop`, futuramente).
+//!
+//! Convenções:
+//! - Todo nó que pode originar uma mensagem de erro carrega `linha: usize`
+//!   (1-based), para o formato de diagnóstico do erro.
+//! - `Bloco` é simplesmente uma sequência de [`Comando`]s.
+//! - Declarações de nível superior (`const`/`tipo`/`var`/sub-rotinas) podem
+//!   aparecer intercaladas e em qualquer ordem — por isso
+//!   [`DeclaracaoTopo`] é um enum, e [`Programa`]/[`SubRotina`] guardam
+//!   `Vec<DeclaracaoTopo>`.
 
 // =====================================================================================
 // Programa
 // =====================================================================================
 
+/// Um programa PEPPE completo: `programa <NOME> ... início ... fim`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Programa {
     pub nome: String,
@@ -13,27 +25,37 @@ pub struct Programa {
     pub bloco_principal: Bloco,
 }
 
+/// Uma declaração de nível superior — de um programa ou do corpo de uma
+/// sub-rotina (sub-rotinas aninhadas).
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclaracaoTopo {
     Const(DeclaracaoConst),
     Tipo(DeclaracaoTipo),
     Var(DeclaracaoVar),
     SubRotina(SubRotina),
+    /// `função <Classe>..<MÉTODO>(...) [: tipo] ... início ... fim`, ou a
+    /// forma `procedimento` equivalente (implementação
+    /// externa). A assinatura precisa corresponder a uma
+    /// `ItemClasse::AssinaturaMetodo` dentro da declaração de `<Classe>`
+    /// (validado pelo verificador semântico).
     MetodoExterno { classe: String, metodo: SubRotina },
 }
 
 // =====================================================================================
-// Declarações 
+// Declarações
 // =====================================================================================
 
+/// `const NOME = <literal>`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclaracaoConst {
     pub nome: String,
+    /// Sempre um literal — `Expr::Inteiro`, `Expr::Real`,
+    /// `Expr::Texto`, `Expr::Caractere` ou `Expr::Logico`.
     pub valor: Expr,
     pub linha: usize,
 }
 
-/// tipo NOME = <definição>
+/// `tipo NOME = <definição>`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclaracaoTipo {
     pub nome: String,
@@ -41,8 +63,8 @@ pub struct DeclaracaoTipo {
     pub linha: usize,
 }
 
-/// var NOME1, NOME2, ... : <tipo>. Uma linha de `var` com
-/// vários nomes do mesmo tipo é representada por uma `DeclaracaoVar`
+/// `var NOME1, NOME2, ... : <tipo>`. Uma linha de `var` com
+/// vários nomes do mesmo tipo é representada por **uma** `DeclaracaoVar`
 /// com `nomes.len() > 1`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclaracaoVar {
@@ -52,26 +74,59 @@ pub struct DeclaracaoVar {
 }
 
 /// Um tipo PEPPE — primitivo, alias (`tipo`), `registro` ou `conjunto`
+/// .
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tipo {
     Primitivo(TipoPrimitivo),
+    /// Tipo `generico` — polimorfismo paramétrico (fase 2).
     Generico,
+    /// Referência a um tipo definido via `tipo NOME = ...` (alias, registro,
+    /// conjunto ou — fase 2 — classe). Resolvido pelo verificador semântico.
     Nomeado(String),
+    /// `registro <campos> fim_registro`.
     Registro(Vec<DeclaracaoVar>),
+    /// `conjunto [<dim1>, <dim2>, ...] de <tipo>`.
+    ///
+    /// Cada dimensão é `Some((inicio, fim))` para um array estático
+    /// (`[1..8]`) ou `None` para a dimensão vazia de um array dinâmico
+    /// (`conjunto [] de cadeia`).
     Conjunto {
         dimensoes: Vec<Option<(Expr, Expr)>>,
         elemento: Box<Tipo>,
     },
+    /// `classe [herança de <ClasseBase1>[, de <ClasseBase2>, ...]]
+    /// <seções de membros> fim_classe`. Herança múltipla
+    /// é suportada — `heranca` é a lista de bases **diretas**,
+    /// na ordem declarada (vazia = sem herança, um elemento = herança
+    /// simples, dois ou mais = múltipla). PEPPE não tem herança virtual
+    /// (decisão do autor): se duas bases diretas compartilham, por sua
+    /// vez, uma base comum mais acima ("diamond problem"), cada caminho
+    /// de herança duplica essa base — igual C++ sem a palavra-chave
+    /// `virtual`. Colisão de nome entre bases (ou herdado por mais de
+    /// um caminho) é erro de ambiguidade ao acessar sem qualificação;
+    /// desambigua-se com `CLS_BASE..NOME` (mesmo operador `..` usado em
+    /// método externo) — ver `Verificador::achatar_classe`.
     Classe {
         heranca: Vec<String>,
         membros: Vec<MembroClasse>,
     },
+    /// `função(tipo1, tipo2, ...)` — tipo de uma
+    /// referência a função de primeira classe. Só fixa os tipos dos
+    /// **parâmetros** (`parametros`); o tipo de retorno é livre — uma
+    /// variável deste tipo aceita qualquer função cujos parâmetros
+    /// tenham esses tipos, na ordem, com qualquer retorno. Só aceita
+    /// **funções** (sub-rotinas com retorno), nunca procedimentos —
+    /// validado pelo verificador semântico, não na própria AST.
+    /// Sempre usado através de um alias nomeado (`tipo FUNC1 =
+    /// função(inteiro)`), nunca como tipo anônimo numa declaração de
+    /// `var` — mesma convenção de `classe`/`registro`.
     Funcao {
         parametros: Vec<Tipo>,
     },
 }
 
-/// Os cinco tipos primitivos da PEPPE.
+/// Os cinco tipos primitivos da PEPPE, também usados como destino
+/// de *cast*.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TipoPrimitivo {
     Inteiro,
@@ -85,7 +140,7 @@ pub enum TipoPrimitivo {
 // Classes — declaração de membros
 // =====================================================================================
 
-/// Um membro de classe.
+/// Um membro de classe, com sua seção de visibilidade.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MembroClasse {
     pub visibilidade: Visibilidade,
@@ -100,6 +155,11 @@ pub enum Visibilidade {
     Privada,
 }
 
+/// Modificador de dispatch de um método — `virtual` na
+/// classe-base habilita sobrescrita; `sobrepor` na classe derivada
+/// redefine um método `virtual` correspondente. `Nenhum` é o padrão
+/// (*binding* estático, resolvido pelo tipo declarado da variável, não
+/// pela classe real da instância).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Modificador {
     #[default]
@@ -109,14 +169,17 @@ pub enum Modificador {
 }
 
 /// O que pode aparecer dentro de uma seção de visibilidade de uma classe
+///.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ItemClasse {
     /// Um campo de dados — `NOME1, NOME2, ... : <tipo>` (mesma forma de
     /// `var`/campo de `registro`).
     Campo(DeclaracaoVar),
-    /// Assinatura de método sem corpo aqui — a implementação aparece
+    /// Assinatura de método **sem** corpo aqui — a implementação aparece
     /// em outro lugar: como `MetodoInterno` em outra seção da mesma
-    /// classe, ou como [`DeclaracaoTopo::MetodoExterno`] fora da classe.
+    /// classe, ou como [`DeclaracaoTopo::MetodoExterno`] fora da classe
+    ///. É erro semântico se a assinatura nunca for
+    /// implementada em nenhum dos dois lugares.
     AssinaturaMetodo {
         categoria: CategoriaSubRotina,
         nome: String,
@@ -125,13 +188,13 @@ pub enum ItemClasse {
         modificador: Modificador,
         linha: usize,
     },
-    /// Implementação completa de um método dentro da declaração da
-    /// classe.
+    /// Implementação completa de um método **dentro** da declaração da
+    /// classe (forma "interna").
     MetodoInterno(SubRotina, Modificador),
 }
 
 // =====================================================================================
-// Sub-rotinas 
+// Sub-rotinas
 // =====================================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +205,10 @@ pub enum CategoriaSubRotina {
 
 /// `procedimento NOME(...) ... início ... fim` ou
 /// `função NOME(...) : <tipo> ... início ... fim`.
+///
+/// Sub-rotinas aninhadas aparecem dentro de
+/// `declaracoes_locais` de sua sub-rotina "pai", como mais um
+/// [`DeclaracaoTopo::SubRotina`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubRotina {
     pub categoria: CategoriaSubRotina,
@@ -155,8 +222,8 @@ pub struct SubRotina {
     pub linha: usize,
 }
 
-/// Um grupo de parâmetros: `[var] NOME1, NOME2, ... : <tipo>` separado de
-/// outros grupos por `;`.
+/// Um grupo de parâmetros: `[var] NOME1, NOME2, ... : <tipo>` — separado de
+/// outros grupos por `;` (Padrão A).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parametro {
     pub nomes: Vec<String>,
@@ -166,24 +233,24 @@ pub struct Parametro {
 }
 
 // =====================================================================================
-// Comandos 
+// Comandos
 // =====================================================================================
 
 pub type Bloco = Vec<Comando>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Comando {
-    /// `<lvalue> ← <expr>` (seção 5.1).
+    /// `<lvalue> ← <expr>`.
     Atribuicao { destino: LValue, valor: Expr, linha: usize },
 
-    /// `leia <lvalue> {, <lvalue>}` (seção 6.1).
+    /// `leia <lvalue> {, <lvalue>}`.
     Leia { variaveis: Vec<LValue>, linha: usize },
 
-    /// `leia_seco <lvalue>` — leitura sem eco (seção 6.3).
+    /// `leia_seco <lvalue>` — leitura sem eco.
     LeiaSeco { variavel: LValue, linha: usize },
 
-    /// `escreva <item> {, <item>}` (seção 6.2/6.2.1), ou `escreva_ln
-    /// <item> {, <item>}` (seção 6.2.2) quando `quebra_linha` é `true` —
+    /// `escreva <item> {, <item>}`, ou `escreva_ln
+    /// <item> {, <item>}` quando `quebra_linha` é `true` —
     /// mesma sintaxe e especificadores de formatação (`:largura:decimais`)
     /// de `escreva`, mas com um `\n` automático ao final de toda a lista
     /// (estilo Pascal `writeln`). `escreva_ln` sem nenhum item é válido e
@@ -191,11 +258,11 @@ pub enum Comando {
     Escreva { itens: Vec<ItemEscreva>, quebra_linha: bool, linha: usize },
 
     /// `pausa` — interrompe a execução até o usuário pressionar `<Enter>`
-    /// (seção 6.4). Lê e descarta uma linha de `stdin`, sem armazenar o
+    ///. Lê e descarta uma linha de `stdin`, sem armazenar o
     /// valor em nenhuma variável.
     Pausa { linha: usize },
 
-    /// `se (<cond>) então <bloco> [senão <bloco>] fim_se` (seção 7.1).
+    /// `se (<cond>) então <bloco> [senão <bloco>] fim_se`.
     Se {
         condicao: Expr,
         entao: Bloco,
@@ -204,7 +271,7 @@ pub enum Comando {
     },
 
     /// `exceto_se (<cond>) então <bloco> [senão <bloco>] fim_exceto_se`
-    /// (seção 7.2) — semântica de `se` com a condição invertida.
+    /// — semântica de `se` com a condição invertida.
     ExcetoSe {
         condicao: Expr,
         entao: Bloco,
@@ -213,7 +280,7 @@ pub enum Comando {
     },
 
     /// `caso <expr> { seja <valor> faça <bloco> } [senão <bloco>] fim_caso`
-    /// (seção 7.3). `senão` é opcional (✅ v0.7).
+    ///. `senão` é opcional.
     Caso {
         expressao: Expr,
         ramos: Vec<RamoCaso>,
@@ -222,28 +289,28 @@ pub enum Comando {
     },
 
     /// `enquanto (<cond>) faça <bloco> fim_enquanto` — pré-teste, executa
-    /// enquanto verdadeiro (seção 8).
+    /// enquanto verdadeiro.
     Enquanto { condicao: Expr, corpo: Bloco, linha: usize },
 
     /// `até_seja (<cond>) efetue <bloco> fim_até_seja` — pré-teste, executa
-    /// enquanto falso (seção 8).
+    /// enquanto falso.
     AteSeja { condicao: Expr, corpo: Bloco, linha: usize },
 
     /// `repita <bloco> até_que (<cond>)` — pós-teste, executa enquanto falso
-    /// (seção 8).
+    ///.
     Repita { corpo: Bloco, condicao: Expr, linha: usize },
 
     /// `execute <bloco> enquanto_for (<cond>)` — pós-teste, executa enquanto
-    /// verdadeiro (seção 8).
+    /// verdadeiro.
     Execute { corpo: Bloco, condicao: Expr, linha: usize },
 
-    /// `laço <bloco_com_saia> fim_laço` — laço indefinido (seção 8).
+    /// `laço <bloco_com_saia> fim_laço` — laço indefinido.
     /// `saia_caso`/`interrompa` aparecem como [`Comando::SaiaCaso`] /
     /// [`Comando::Interrompa`] dentro do `corpo`.
     Laco { corpo: Bloco, linha: usize },
 
     /// `para <var> de <ini> até <fim> [passo <passo>] faça <bloco> fim_para`
-    /// (seção 8). `passo` ausente equivale a `1`.
+    ///. `passo` ausente equivale a `1`.
     Para {
         variavel: String,
         inicio: Expr,
@@ -253,14 +320,14 @@ pub enum Comando {
         linha: usize,
     },
 
-    /// `dimensione VAR[<ini1>..<fim1> {, <ini2>..<fim2>}]` (seção 4.5.1).
+    /// `dimensione VAR[<ini1>..<fim1> {, <ini2>..<fim2>}]`.
     Dimensione {
         variavel: String,
         dimensoes: Vec<(Expr, Expr)>,
         linha: usize,
     },
 
-    /// Chamada de `procedimento` como comando (seção 9.7):
+    /// Chamada de `procedimento` como comando:
     /// `NOME` ou `NOME(arg1, arg2, ...)`.
     ChamadaProcedimento {
         nome: String,
@@ -269,30 +336,30 @@ pub enum Comando {
     },
 
     /// Chamada de método como comando, ignorando o valor de retorno se
-    /// houver (seção 10.4): `OBJETO.MÉTODO()`, `OBJETO.MÉTODO(args)`. O
+    /// houver: `OBJETO.MÉTODO()`, `OBJETO.MÉTODO(args)`. O
     /// último acesso de `alvo` é sempre `Acesso::Metodo` (garantido pelo
     /// parser) — `alvo` é um `LValue` completo (não só um nome) para
     /// suportar receptores encadeados (ex.: `MATRIZ[I].MÉTODO()`).
     ChamadaMetodo { alvo: LValue, linha: usize },
 
-    /// `RÓTULO:` (seção 8, desvio incondicional).
+    /// `RÓTULO:` (desvio incondicional).
     Rotulo { nome: String, linha: usize },
 
-    /// `ir_para RÓTULO` (seção 8).
+    /// `ir_para RÓTULO`.
     IrPara { rotulo: String, linha: usize },
 
-    /// `interrompa` — *break* universal (seção 8, ✅ v0.3).
+    /// `interrompa` — *break* universal.
     Interrompa { linha: usize },
     /// `continue` — pula para a próxima iteração do laço mais interno
     /// (equivalente ao `continue` do C/Pascal). Só válido dentro de laço
     /// (`enquanto`, `repita`, `execute`, `para`, `laço`).
     Continue { linha: usize },
 
-    /// `saia_caso (<cond>)` — específico do `laço` (seção 8); equivalente a
+    /// `saia_caso (<cond>)` — específico do `laço`; equivalente a
     /// `se (<cond>) então interrompa fim_se`.
     SaiaCaso { condicao: Expr, linha: usize },
 
-    // -- Comandos de console — estilo CONIO (seção 6.3) --------------------------
+    // -- Comandos de console — estilo CONIO --------------------------
     /// `limpar`.
     Limpar { linha: usize },
     /// `limpar_linha` ou `limpar_linha(<col>)`.
@@ -305,23 +372,23 @@ pub enum Comando {
     CorFrente { cor: Expr, linha: usize },
 }
 
-/// Um ramo `seja <valor> faça <bloco>` de um `caso` (seção 7.3).
+/// Um ramo `seja <valor> faça <bloco>` de um `caso`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RamoCaso {
-    /// Sempre um literal (seção 7.3): inteiro, texto, etc.
+    /// Sempre um literal: inteiro, texto, etc.
     pub valor: Expr,
     pub corpo: Bloco,
     pub linha: usize,
 }
 
 /// Um item de `escreva`, com especificador de formatação opcional
-/// `[: <largura> [: <decimais>]]` (seção 6.2.1).
+/// `[: <largura> [: <decimais>]]`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ItemEscreva {
     pub expressao: Expr,
     pub largura: Option<Expr>,
     /// Só tem sentido quando `expressao` é `real`; ignorado/erro semântico
-    /// para outros tipos (seção 6.2.1).
+    /// para outros tipos.
     pub decimais: Option<Expr>,
 }
 
@@ -331,17 +398,17 @@ pub struct ItemEscreva {
 
 /// Um "lugar" que pode receber uma atribuição ou ser lido por `leia`:
 /// `NOME`, `NOME.CAMPO`, `NOME[i]`, `NOME[i,j]`, `ALUNO[I].NOTAS[J]`, etc.
-/// (seção 1.2 / EBNF `lvalue`).
+/// (/ EBNF `lvalue`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LValue {
-    /// Qualificação de escopo opcional (`CLS_BASE..NOME...`, Fase 6 —
-    /// seção 10.1/10.6.1): desambigua um campo/método de `nome` que
+    /// Qualificação de escopo opcional (`CLS_BASE..NOME...`, seção
+    /// 10.1/10.6.1): desambigua um campo/método de `nome` que
     /// existe em mais de uma classe-base direta (herança múltipla sem
     /// `virtual`), indicando explicitamente a partir de qual base
     /// resolver o **primeiro** acesso da cadeia — acessos subsequentes
     /// (`.CAMPO`, `.MÉTODO()`) continuam resolvendo normalmente a
     /// partir do tipo resultante. Reaproveita o mesmo operador `..` já
-    /// usado para método externo (seção 10.3), mas em posição de
+    /// usado para método externo, mas em posição de
     /// expressão/lvalue em vez de declaração de topo.
     pub qualificador_base: Option<String>,
     pub nome: String,
@@ -352,13 +419,13 @@ pub struct LValue {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Acesso {
-    /// `.CAMPO` — acesso a campo de `registro` (seção 4.4), ou a um campo
-    /// de instância de `classe` (seção 10.4).
+    /// `.CAMPO` — acesso a campo de `registro`, ou a um campo
+    /// de instância de `classe`.
     Campo(String),
-    /// `[i]` ou `[i, j]` — acesso a elemento de `conjunto` (seção 4.5).
+    /// `[i]` ou `[i, j]` — acesso a elemento de `conjunto`.
     Indice(Vec<Expr>),
     /// `.MÉTODO(args)` — chamada de método sobre uma instância de classe
-    /// (seção 10.4). Sempre o **último** acesso de uma cadeia (não há
+    ///. Sempre o **último** acesso de uma cadeia (não há
     /// `.CAMPO` ou `.MÉTODO()` válido depois de uma chamada de método —
     /// validado pelo verificador semântico, já que o valor de retorno não
     /// é um "lugar" encadeável). Usado tanto como comando solto
@@ -368,7 +435,7 @@ pub enum Acesso {
 }
 
 // =====================================================================================
-// Expressões (seção 5)
+// Expressões
 // =====================================================================================
 
 #[derive(Debug, Clone, PartialEq)]
@@ -376,7 +443,7 @@ pub enum Expr {
     Inteiro(i64),
     Real(f64),
     Texto(String),
-    /// Literal `caractere` entre aspas simples (ex.: `'S'`, seção 3) —
+    /// Literal `caractere` entre aspas simples (ex.: `'S'`) —
     /// exatamente um símbolo, sempre tipado como `Caractere`, nunca
     /// `Cadeia` (diferente de `Expr::Texto`, que é sempre `Cadeia` mesmo
     /// com um único caractere dentro das aspas duplas).
@@ -385,13 +452,13 @@ pub enum Expr {
 
     /// Referência a uma variável (possivelmente com acessos a
     /// campo/índice) — também usada para identificadores pré-definidos
-    /// (`p_pi`, `p_euler`, `p_infinito`, seção 5.6) antes da resolução
+    /// (`p_pi`, `p_euler`, `p_infinito`) antes da resolução
     /// semântica.
     Variavel(LValue),
 
     /// Chamada de função ou identificador pré-definido com argumentos:
     /// `NOME(arg1, arg2, ...)` — inclui funções matemáticas embutidas
-    /// (seção 5.6) e chamadas de `função` do usuário.
+    /// e chamadas de `função` do usuário.
     Chamada {
         nome: String,
         argumentos: Vec<Expr>,
@@ -400,7 +467,7 @@ pub enum Expr {
 
     /// Operação binária — aritmética, relacional ou lógica (seções
     /// 5.2/5.3/5.4), incluindo concatenação de `cadeia` com `+`
-    /// (seção 10.5.2).
+    ///.
     Binaria {
         op: OpBinario,
         esquerda: Box<Expr>,
@@ -408,11 +475,11 @@ pub enum Expr {
         linha: usize,
     },
 
-    /// Operação unária: `-<expr>` ou `.não. <expr>` (seção 5.5).
+    /// Operação unária: `-<expr>` ou `.não. <expr>`.
     Unaria { op: OpUnario, expr: Box<Expr>, linha: usize },
 
     /// *Cast* explícito — estilo função (`inteiro(X)`) ou estilo C
-    /// (`(inteiro) X`), ambos equivalentes (seção 10.5.1).
+    /// (`(inteiro) X`), ambos equivalentes.
     Cast {
         tipo: TipoPrimitivo,
         expr: Box<Expr>,
@@ -420,26 +487,26 @@ pub enum Expr {
     },
 }
 
-/// Operadores binários (seções 5.2/5.3/5.4), em uma única enumeração — a
-/// precedência (seção 5.5) é responsabilidade do *parser*, não da AST.
+/// Operadores binários , em uma única enumeração — a
+/// precedência é responsabilidade do *parser*, não da AST.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpBinario {
-    // Aritméticos (seção 5.2)
-    /// `+` — soma (`inteiro`/`real`) ou concatenação (`cadeia`, seção 10.5.2)
+    // Aritméticos
+    /// `+` — soma (`inteiro`/`real`) ou concatenação (`cadeia`)
     Soma,
     /// `-` ou `–` (en-dash, sinônimo aceito pelo lexer)
     Subtracao,
     Multiplicacao,
-    /// `/` — divisão real (seção 5.2)
+    /// `/` — divisão real
     Divisao,
     /// `div` — divisão inteira
     Div,
     /// `mod` — resto da divisão
     Mod,
-    /// `^` ou `↑` — potenciação, associativa à direita (seção 5.2/5.5)
+    /// `^` ou `↑` — potenciação, associativa à direita
     Potencia,
 
-    // Relacionais (seção 5.3)
+    // Relacionais
     Igual,
     Diferente,
     Menor,
@@ -447,7 +514,7 @@ pub enum OpBinario {
     MenorIgual,
     MaiorIgual,
 
-    // Lógicos (seção 5.4)
+    // Lógicos
     /// `.e.`
     E,
     /// `.ou.`
@@ -456,7 +523,7 @@ pub enum OpBinario {
     Xou,
 }
 
-/// Operadores unários (seção 5.5).
+/// Operadores unários.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpUnario {
     /// `-<expr>` — negação aritmética

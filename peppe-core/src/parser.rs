@@ -1,8 +1,7 @@
-//! Parser (analisador sintático) da linguagem PEPPE — núcleo estrutural
-//! (seções 1–9 da especificação, EBNF da seção 12).
+//! Parser (analisador sintático) da linguagem PEPPE — núcleo estrutural.
 //!
 //! Implementado como parser recursivo-descendente, um método por regra da
-//! gramática. Programação Orientada a Objetos (seção 10, `objeto`/`classe`)
+//! gramática. Programação Orientada a Objetos (`objeto`/`classe`)
 //! ainda não é suportada: ao encontrar essas palavras-chave em posição de
 //! declaração, o parser retorna um [`ErroSintatico`] explicando que o
 //! recurso está previsto para uma fase futura, em vez de uma mensagem de
@@ -11,11 +10,11 @@
 //! ## Decisões de implementação dignas de nota
 //!
 //! - **`;` é invisível** — o lexer já o trata como separador ignorável
-//!   (seção 1.4), então o parser nunca precisa "esperar" por ele. Em
+//!, então o parser nunca precisa "esperar" por ele. Em
 //!   particular, isso resolve sozinho a separação de grupos de parâmetros
-//!   por `;` (Padrão A, seção 9.3): um novo grupo de parâmetros começa
+//!   por `;` (Padrão A): um novo grupo de parâmetros começa
 //!   sempre que o anterior termina e o próximo token não é `)`.
-//! - **Padrão B de parâmetros** (`,` separando grupos — erro, seção 9.3)
+//! - **Padrão B de parâmetros** (`,` separando grupos — erro)
 //!   é detectado especificamente em [`Parser::parse_parametros`], com uma
 //!   mensagem didática explicando o motivo.
 //! - **Atribuição vs. chamada de procedimento vs. rótulo** — todas começam
@@ -28,8 +27,7 @@
 use crate::ast::*;
 use crate::token::{Token, TokenKind};
 
-/// Erro sintático, com posição (1-based) e mensagem didática em português,
-/// seguindo o formato da seção 15.3 da especificação.
+/// Erro sintático, com posição (1-based) e mensagem didática em português.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ErroSintatico {
     pub linha: usize,
@@ -136,8 +134,8 @@ impl Parser {
     }
 
     /// Retorna `Some(TipoPrimitivo)` se o token atual for uma das cinco
-    /// palavras-chave de tipo primitivo (seção 3) — usado para detectar
-    /// *casts* (seção 10.5.1).
+    /// palavras-chave de tipo primitivo — usado para detectar
+    /// *casts*.
     fn tipo_primitivo_atual(&self) -> Option<TipoPrimitivo> {
         match self.peek().kind {
             TokenKind::TipoInteiro => Some(TipoPrimitivo::Inteiro),
@@ -150,7 +148,7 @@ impl Parser {
     }
 
     // =====================================================================================
-    // Programa (seção 1.1)
+    // Programa
     // =====================================================================================
 
     fn parse_programa(&mut self) -> Result<Programa, ErroSintatico> {
@@ -173,11 +171,11 @@ impl Parser {
     }
 
     // =====================================================================================
-    // Declarações de nível superior (seção 4 / 9 — `const`, `tipo`, `var`, sub-rotinas)
+    // Declarações de nível superior (/ 9 — `const`, `tipo`, `var`, sub-rotinas)
     // =====================================================================================
 
     /// Consome `const`/`tipo`/`var`/`procedimento`/`função` em qualquer
-    /// ordem e quantidade (seção 1.1), até encontrar `início` (ou `fim` de
+    /// ordem e quantidade, até encontrar `início` (ou `fim` de
     /// uma sub-rotina sem corpo — não aplicável na v1, toda sub-rotina tem
     /// corpo). Retorna ao chamador quando nenhuma dessas palavras-chave
     /// inicia o próximo token.
@@ -193,14 +191,14 @@ impl Parser {
                     decls.push(self.parse_subrotina_ou_metodo_externo()?);
                 }
                 // 'NOME = <definição>' sem a palavra-chave 'tipo' repetida
-                // (seção 10.3): uma implementação de método externo
+                //: uma implementação de método externo
                 // (`procedimento Classe..Método(...) ... fim`) pode
                 // aparecer ENTRE duas declarações de classe que, no
                 // código-fonte, fazem parte da mesma seção 'tipo' visual
                 // — depois de processá-la, o próximo 'NOME = ...' ainda
                 // pertence a essa mesma seção lógica, mesmo sem repetir
                 // 'tipo'. Só entra aqui quando o identificador é
-                // seguido de '=' (Padrão de `tipo`, seção 4.3); qualquer
+                // seguido de '=' (Padrão de `tipo`); qualquer
                 // outra coisa (ex.: um comando começando antes de
                 // 'início', o que já seria erro) cai no 'break' normal.
                 TokenKind::Identificador(_) if self.peek_at(1) == &TokenKind::Igual => {
@@ -216,7 +214,7 @@ impl Parser {
         Ok(decls)
     }
 
-    /// `const NOME1 = <literal> NOME2 = <literal> ...` (seção 4.1).
+    /// `const NOME1 = <literal> NOME2 = <literal> ...`.
     fn parse_secao_const(&mut self) -> Result<Vec<DeclaracaoTopo>, ErroSintatico> {
         self.expect(TokenKind::Const)?;
         let mut decls = Vec::new();
@@ -230,7 +228,7 @@ impl Parser {
         Ok(decls)
     }
 
-    /// `tipo NOME1 = <definição> NOME2 = <definição> ...` (seção 4.3/4.4/4.5).
+    /// `tipo NOME1 = <definição> NOME2 = <definição> ...`.
     fn parse_secao_tipo(&mut self) -> Result<Vec<DeclaracaoTopo>, ErroSintatico> {
         self.expect(TokenKind::Tipo)?;
         let mut decls = Vec::new();
@@ -245,7 +243,7 @@ impl Parser {
     }
 
     /// `var <linha1> <linha2> ...`, onde cada linha é
-    /// `NOME1, NOME2, ... : <tipo>` (seção 4.2).
+    /// `NOME1, NOME2, ... : <tipo>`.
     fn parse_secao_var(&mut self) -> Result<Vec<DeclaracaoTopo>, ErroSintatico> {
         self.expect(TokenKind::Var)?;
         let mut decls = Vec::new();
@@ -269,9 +267,9 @@ impl Parser {
         Ok(DeclaracaoVar { nomes, tipo, linha })
     }
 
-    /// `objeto NOME1, NOME2, ... : <Identificador_Classe>` (seção 10.2).
-    /// **✅ RESOLVIDO:** `objeto` e `var` são equivalentes para tipos-classe
-    /// (ver especificação, seção 10.2) — reaproveita exatamente a mesma
+    /// `objeto NOME1, NOME2, ... : <Identificador_Classe>`.
+    /// `objeto` e `var` são equivalentes para tipos-classe
+    /// (ver especificação) — reaproveita exatamente a mesma
     /// gramática de `parse_secao_var`/`parse_linha_var`, só com a
     /// palavra-chave `objeto` introduzindo a seção em vez de `var`. O
     /// resultado é representado da mesma forma na AST
@@ -286,7 +284,7 @@ impl Parser {
     }
 
     // =====================================================================================
-    // Tipos (seção 3/4.3/4.4/4.5)
+    // Tipos
     // =====================================================================================
 
     fn parse_tipo(&mut self) -> Result<Tipo, ErroSintatico> {
@@ -315,7 +313,7 @@ impl Parser {
         }
     }
 
-    /// `registro <campo1> <campo2> ... fim_registro` (seção 4.4).
+    /// `registro <campo1> <campo2> ... fim_registro`.
     fn parse_tipo_registro(&mut self) -> Result<Tipo, ErroSintatico> {
         self.expect(TokenKind::Registro)?;
         let mut campos = Vec::new();
@@ -326,7 +324,7 @@ impl Parser {
         Ok(Tipo::Registro(campos))
     }
 
-    /// `função(tipo1, tipo2, ...)` (seção 10.5.3) — tipo de uma
+    /// `função(tipo1, tipo2, ...)` — tipo de uma
     /// referência a função de primeira classe. Só a lista de tipos dos
     /// parâmetros entra entre parênteses; o retorno é livre (não faz
     /// parte da sintaxe deste tipo). Lista vazia (`função()`) é válida
@@ -346,8 +344,8 @@ impl Parser {
         Ok(Tipo::Funcao { parametros })
     }
 
-    /// `conjunto [<dim1>, <dim2>, ...] de <tipo>` (seção 4.5), incluindo a
-    /// forma dinâmica de uma ou mais dimensões (seção 4.5.1):
+    /// `conjunto [<dim1>, <dim2>, ...] de <tipo>`, incluindo a
+    /// forma dinâmica de uma ou mais dimensões:
     /// `conjunto [] de <tipo>` (1 dimensão dinâmica) ou, de forma geral,
     /// cada "slot" separado por vírgula dentro de `[...]` pode ser vazio
     /// (dimensão dinâmica, dimensionada depois via `dimensione`) ou um par
@@ -361,7 +359,7 @@ impl Parser {
         let mut dimensoes = Vec::new();
         loop {
             if self.check(&TokenKind::Virgula) || self.check(&TokenKind::FechaColchete) {
-                // Slot vazio = dimensão dinâmica (seção 4.5.1).
+                // Slot vazio = dimensão dinâmica.
                 dimensoes.push(None);
             } else {
                 let inicio = self.parse_expr()?;
@@ -383,15 +381,15 @@ impl Parser {
     }
 
     // =====================================================================================
-    // Sub-rotinas (seção 9)
+    // Sub-rotinas
     // =====================================================================================
 
     /// `(procedimento|função) NOME[(<parâmetros>)] [: <tipo_retorno>]`
-    /// `<declarações locais> início <corpo> fim` (seção 9.1/9.2).
+    /// `<declarações locais> início <corpo> fim`.
     /// Decide entre `procedimento`/`função` de nível superior comum
-    /// (seção 9) e a forma de **método externo** `procedimento
+    /// e a forma de **método externo** `procedimento
     /// <Classe>..<MÉTODO>(...) ... fim` / `função <Classe>..<MÉTODO>(...)
-    /// : <tipo> ... fim` (seção 10.3) — a diferença só aparece depois do
+    /// : <tipo> ... fim` — a diferença só aparece depois do
     /// primeiro identificador (nome da classe, no caso de método externo,
     /// ou nome da própria sub-rotina, no caso comum): se o token seguinte
     /// é `..` (resolução de escopo), é método externo.
@@ -483,8 +481,8 @@ impl Parser {
     }
 
     /// `classe [herança de <ClasseBase1>[, de <ClasseBase2>, ...]]
-    /// <seções de membros>* fim_classe` (seção 10.1). Herança múltipla
-    /// (Fase 6): cada base adicional repete a palavra `de` depois da
+    /// <seções de membros>* fim_classe`. Herança múltipla
+    /// Cada base adicional repete a palavra `de` depois da
     /// vírgula (`herança de CLS_A, de CLS_B`), não apenas uma lista de
     /// nomes separados por vírgula — assim a leitura fica inequívoca
     /// mesmo para quem só leu até aqui na ementa do curso.
@@ -526,10 +524,10 @@ impl Parser {
         Ok(Tipo::Classe { heranca, membros })
     }
 
-    /// Um único membro dentro de uma seção de visibilidade (seção 10.1):
+    /// Um único membro dentro de uma seção de visibilidade:
     /// campo (`NOME1, NOME2 : <tipo>`) ou método — assinatura apenas
     /// (`procedimento NOME(...)`/`função NOME(...) : <tipo>`, sem corpo,
-    /// implementado em outro lugar — seção 10.3) ou método interno
+    /// implementado em outro lugar ) ou método interno
     /// (mesma assinatura seguida de `[declarações locais] início ... fim`,
     /// corpo implementado ali mesmo).
     fn parse_membro_classe(&mut self, visibilidade: Visibilidade) -> Result<MembroClasse, ErroSintatico> {
@@ -538,10 +536,9 @@ impl Parser {
             return Ok(MembroClasse { visibilidade, item: ItemClasse::Campo(campo) });
         }
 
-        // 'virtual'/'sobrepor' (seção 10.6) — modificador de dispatch,
+        // 'virtual'/'sobrepor' — modificador de dispatch,
         // sempre antes de 'procedimento'/'função'. Ausência de ambos =
-        // 'Modificador::Nenhum' (binding estático, comportamento padrão
-        // já existente desde a Fase 1).
+        // 'Modificador::Nenhum' (binding estático, comportamento padrão).
         let modificador = match self.peek().kind {
             TokenKind::Virtual => {
                 self.avancar();
@@ -575,9 +572,9 @@ impl Parser {
         };
 
         // Distingue assinatura-apenas de método interno: se o que vem a
-        // seguir poderia iniciar declarações locais (seção 9, exceto
+        // seguir poderia iniciar declarações locais (exceto
         // 'procedimento'/'função' — ver nota abaixo) ou já é 'início'
-        // diretamente, há um corpo aqui — é método interno (seção 10.3).
+        // diretamente, há um corpo aqui — é método interno.
         // Caso contrário (próximo token é outra assinatura/método,
         // outra seção de visibilidade, ou 'fim_classe'), é só a
         // assinatura, implementada em outro lugar.
@@ -635,16 +632,16 @@ impl Parser {
 
 
     ///
-    /// ✅ v0.10: `ref` marca passagem por referência; `vlr` marca passagem
+    /// `ref` marca passagem por referência; `vlr` marca passagem
     /// por valor de forma **explícita, porém opcional** — omitir o
     /// marcador já significa passagem por valor (o comportamento de
     /// `vlr X : tipo` e `X : tipo` é idêntico). Nem `ref` nem `var` (este
-    /// último reservado à seção de declarações, seção 4.2) se sobrepõem.
+    /// último reservado à seção de declarações) se sobrepõem.
     ///
     /// Como `;` é invisível para o parser (descartado pelo lexer), um novo
     /// grupo simplesmente começa quando o anterior termina e o próximo
     /// token não é `)`. Se o próximo token for `,`, é o **Padrão B**
-    /// (seção 9.3) — erro com mensagem explicativa.
+    /// — erro com mensagem explicativa.
     fn parse_parametros(&mut self) -> Result<Vec<Parametro>, ErroSintatico> {
         self.expect(TokenKind::AbreParen)?;
         let mut params = Vec::new();
@@ -656,7 +653,7 @@ impl Parser {
                     true
                 } else if self.check(&TokenKind::Var) {
                     // 'var' como marcador de passagem por referência —
-                    // sinônimo de 'ref', estilo Pascal (seção 9.3).
+                    // sinônimo de 'ref', estilo Pascal.
                     self.avancar();
                     true
                 } else if self.check(&TokenKind::Vlr) {
@@ -687,7 +684,7 @@ impl Parser {
                 }
                 // Qualquer outro token ('ref', 'vlr' ou um identificador)
                 // inicia um novo grupo de parâmetros — o ';' que o separava
-                // já foi descartado pelo lexer (seção 1.4).
+                // já foi descartado pelo lexer.
             }
         }
 
@@ -696,7 +693,7 @@ impl Parser {
     }
 
     // =====================================================================================
-    // Blocos e comandos (seções 6, 7, 8, 9.7)
+    // Blocos e comandos 
     // =====================================================================================
 
     /// Lê comandos até que o token atual seja um dos `terminadores`
@@ -781,7 +778,7 @@ impl Parser {
     /// Resolve a ambiguidade de um comando que começa com `Identificador`:
     /// atribuição (`X <- ...`, `A[I] <- ...`, `ALUNO.NOME <- ...`), chamada de
     /// procedimento (`NOME(args)`, sempre com parênteses mesmo sem
-    /// argumentos) ou rótulo (`NOME:`) — seção 8 (rótulos) e 9.7 (chamadas).
+    /// argumentos) ou rótulo (`NOME:`)  (rótulos) e 9.7 (chamadas).
     fn parse_comando_identificador(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
         let primeiro = self.expect_identificador()?;
@@ -804,7 +801,7 @@ impl Parser {
         }
 
         if matches!(acessos.last(), Some(Acesso::Metodo { .. })) {
-            // 'OBJETO.MÉTODO(args)' como comando solto (seção 10.4) — o
+            // 'OBJETO.MÉTODO(args)' como comando solto — o
             // método já foi totalmente consumido (nome + argumentos)
             // dentro de 'parse_acessos'; aqui só embrulhamos a cadeia
             // completa de acessos no comando dedicado.
@@ -885,9 +882,9 @@ impl Parser {
         Ok(argumentos)
     }
 
-    // -- leia / leia_seco / escreva (seção 6) ---------------------------------------
+    // -- leia / leia_seco / escreva ---------------------------------------
 
-    /// `leia <lvalue> {, <lvalue>}` (seção 6.1).
+    /// `leia <lvalue> {, <lvalue>}`.
     fn parse_leia(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
         self.expect(TokenKind::Leia)?;
@@ -899,7 +896,7 @@ impl Parser {
         Ok(Comando::Leia { variaveis, linha })
     }
 
-    /// `leia_seco <lvalue>` (seção 6.3).
+    /// `leia_seco <lvalue>`.
     fn parse_leia_seco(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
         self.expect(TokenKind::LeiaSeco)?;
@@ -917,7 +914,7 @@ impl Parser {
         self.avancar(); // consome 'escreva' ou 'escreva_ln'
 
         // 'escreva_ln' sozinho (sem nenhum item) é válido — só a quebra de
-        // linha (seção 6.2.2). Detectamos isso de duas formas:
+        // linha. Detectamos isso de duas formas:
         // 1. O próximo token não pode iniciar uma expressão; OU
         // 2. O próximo token está em uma linha diferente (separação visual
         //    — ex.: 'escreva_ln' sozinho na linha 18, e 'SB <- ...' na
@@ -941,7 +938,7 @@ impl Parser {
     /// `true` se o token atual é um dos que iniciam `parse_expr_primaria`
     /// (literais, identificador, `(`, ou uma palavra-chave de tipo
     /// primitivo iniciando um *cast*) — usado apenas para decidir se
-    /// `escreva_ln` veio sem nenhum item (seção 6.2.2).
+    /// `escreva_ln` veio sem nenhum item.
     fn proximo_token_inicia_expressao(&self) -> bool {
         if self.tipo_primitivo_atual().is_some() {
             return true;
@@ -975,11 +972,11 @@ impl Parser {
         Ok(ItemEscreva { expressao, largura, decimais })
     }
 
-    // -- Condicionais (seção 7) -----------------------------------------------------
+    // -- Condicionais -----------------------------------------------------
 
-    /// `se (<cond>) então <bloco> [senão <bloco>] fim_se` (seção 7.1).
-    /// `se <cond> então <bloco> [senão <bloco>] fim_se` (seção 7.1).
-    /// A condição é qualquer expressão lógica (seção 5) — parênteses são
+    /// `se (<cond>) então <bloco> [senão <bloco>] fim_se`.
+    /// `se <cond> então <bloco> [senão <bloco>] fim_se`.
+    /// A condição é qualquer expressão lógica — parênteses são
     /// opcionais e ficam a critério de quem escreve: tanto `se (A) .e.
     /// (B) então` quanto `se ((A) .e. (B)) então` e `se A .e. B então`
     /// são formas válidas e equivalentes, já que `Self::parse_expr` já
@@ -1003,7 +1000,7 @@ impl Parser {
     }
 
     /// `exceto_se <cond> então <bloco> [senão <bloco>] fim_exceto_se`
-    /// (seção 7.2). Parênteses na condição são opcionais (mesma nota de
+    ///. Parênteses na condição são opcionais (mesma nota de
     /// `Self::parse_se`).
     fn parse_exceto_se(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
@@ -1022,7 +1019,7 @@ impl Parser {
     }
 
     /// `caso <expr> {seja <literal> faça <bloco_ou_comando>} [senão <bloco>]
-    /// fim_caso` (seção 7.3). `senão` é opcional (✅ v0.7).
+    /// fim_caso`. `senão` é opcional.
     fn parse_caso(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
         self.expect(TokenKind::Caso)?;
@@ -1053,7 +1050,7 @@ impl Parser {
         Ok(Comando::Caso { expressao, ramos, senao, linha })
     }
 
-    // -- Laços (seção 8) --------------------------------------------------------------
+    // -- Laços --------------------------------------------------------------
 
     /// `enquanto <cond> faça <bloco> fim_enquanto`. Parênteses na
     /// condição são opcionais (mesma nota de `Self::parse_se`).
@@ -1133,7 +1130,7 @@ impl Parser {
         Ok(Comando::Para { variavel, inicio, fim, passo, corpo, linha })
     }
 
-    /// `saia_caso <cond>` — específico do `laço` (seção 8).
+    /// `saia_caso <cond>` — específico do `laço`.
     /// Parênteses na condição são opcionais (mesma nota de `parse_se`).
     fn parse_saia_caso(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
@@ -1142,7 +1139,7 @@ impl Parser {
         Ok(Comando::SaiaCaso { condicao, linha })
     }
 
-    /// `ir_para RÓTULO` (seção 8).
+    /// `ir_para RÓTULO`.
     fn parse_ir_para(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
         self.expect(TokenKind::IrPara)?;
@@ -1150,7 +1147,7 @@ impl Parser {
         Ok(Comando::IrPara { rotulo, linha })
     }
 
-    /// `dimensione VAR[<ini1>..<fim1> {, <ini2>..<fim2>}]` (seção 4.5.1).
+    /// `dimensione VAR[<ini1>..<fim1> {, <ini2>..<fim2>}]`.
     fn parse_dimensione(&mut self) -> Result<Comando, ErroSintatico> {
         let linha = self.linha_atual();
         self.expect(TokenKind::Dimensione)?;
@@ -1172,7 +1169,7 @@ impl Parser {
         Ok(Comando::Dimensione { variavel, dimensoes, linha })
     }
 
-    // -- Comandos de console — estilo CONIO (seção 6.3) -----------------------------
+    // -- Comandos de console — estilo CONIO -----------------------------
 
     /// `limpar_linha` ou `limpar_linha(<col>)`.
     fn parse_limpar_linha(&mut self) -> Result<Comando, ErroSintatico> {
@@ -1228,7 +1225,7 @@ impl Parser {
     /// Olha se, depois do identificador `primeiro` (já consumido pelo
     /// chamador), vem `.. IDENTIFICADOR` — reconhecendo a sintaxe de
     /// qualificação de escopo em posição de expressão/lvalue
-    /// (`CLS_BASE..OBJETO.CAMPO`, Fase 6 — seção 10.1/10.6.1, para
+    /// (`CLS_BASE..OBJETO.CAMPO`, para
     /// desambiguar herança múltipla). Mesmos dois tokens (identificador,
     /// `..`, identificador) usados pela forma de método externo (seção
     /// 10.3), mas em contexto diferente (início de comando/expressão em
@@ -1253,7 +1250,7 @@ impl Parser {
         Ok(LValue { qualificador_base, nome, acessos, linha })
     }
 
-    /// Lê uma sequência de acessos `.CAMPO` e `[i]`/`[i,j]` (seção 4.4/4.5).
+    /// Lê uma sequência de acessos `.CAMPO` e `[i]`/`[i,j]`.
     fn parse_acessos(&mut self) -> Result<Vec<Acesso>, ErroSintatico> {
         let mut acessos = Vec::new();
         loop {
@@ -1261,10 +1258,10 @@ impl Parser {
                 self.avancar();
                 let nome = self.expect_identificador()?;
                 if self.check(&TokenKind::AbreParen) {
-                    // '.MÉTODO(args)' — chamada de método (seção 10.4),
+                    // '.MÉTODO(args)' — chamada de método,
                     // não acesso a campo. Sempre exige parênteses, mesmo
                     // sem argumentos (mesma regra de qualquer chamada de
-                    // sub-rotina — seção 9.7).
+                    // sub-rotina ).
                     let argumentos = self.parse_lista_argumentos()?;
                     acessos.push(Acesso::Metodo { nome, argumentos });
                 } else {
@@ -1287,7 +1284,7 @@ impl Parser {
     }
 
     // =====================================================================================
-    // Expressões (seção 5) — cadeia de precedência da seção 5.5
+    // Expressões — cadeia de precedência
     // =====================================================================================
 
     fn parse_expr(&mut self) -> Result<Expr, ErroSintatico> {
@@ -1334,7 +1331,7 @@ impl Parser {
     }
 
     /// Nível 6: relacionais (`=`, `<>`, `<`, `>`, `<=`, `>=`) — não
-    /// associativos (no máximo uma comparação, seção 5.5/12).
+    /// associativos (no máximo uma comparação).
     fn parse_expr_rel(&mut self) -> Result<Expr, ErroSintatico> {
         let esquerda = self.parse_expr_add()?;
         let op = match self.peek().kind {
@@ -1353,7 +1350,7 @@ impl Parser {
     }
 
     /// Nível 4: `+` e `-` (binário) — associativos à esquerda. Inclui
-    /// concatenação de `cadeia` com `+` (seção 10.5.2), resolvida pelo
+    /// concatenação de `cadeia` com `+`, resolvida pelo
     /// verificador semântico/interpretador a partir dos tipos.
     fn parse_expr_add(&mut self) -> Result<Expr, ErroSintatico> {
         let mut esquerda = self.parse_expr_mul()?;
@@ -1377,7 +1374,7 @@ impl Parser {
     }
 
     /// Nível 3: `*`, `/`, `div`, `mod` — associativos à esquerda, mesma
-    /// precedência (seção 5.5, ✅ v0.6).
+    /// precedência.
     fn parse_expr_mul(&mut self) -> Result<Expr, ErroSintatico> {
         let mut esquerda = self.parse_expr_unario()?;
         loop {
@@ -1419,7 +1416,7 @@ impl Parser {
         }
     }
 
-    /// Nível 1: `^`/`↑` — associativo à direita (seção 5.5). O expoente
+    /// Nível 1: `^`/`↑` — associativo à direita. O expoente
     /// pode conter um `expr_unario` (ex.: `A ^ -1`).
     fn parse_expr_pot(&mut self) -> Result<Expr, ErroSintatico> {
         let base = self.parse_expr_primaria()?;
@@ -1439,7 +1436,7 @@ impl Parser {
     }
 
     /// Nível 0: literais, variáveis/acessos, chamadas, parênteses e *casts*
-    /// (seção 10.5.1, ambas as sintaxes).
+    /// (ambas as sintaxes).
     fn parse_expr_primaria(&mut self) -> Result<Expr, ErroSintatico> {
         let linha = self.linha_atual();
 
@@ -1508,7 +1505,7 @@ impl Parser {
                 }
             }
 
-            // 'este' (seção 10.3/10.4): só existe dentro do corpo de um
+            // 'este': só existe dentro do corpo de um
             // método, referenciando a própria instância — sempre seguido
             // de '.CAMPO' ou '.MÉTODO(...)' (nunca chamável diretamente
             // como 'este(...)', diferente de um identificador comum).
@@ -1530,7 +1527,7 @@ impl Parser {
         }
     }
 
-    /// Um literal isolado — usado em `const` (seção 4.1) e `seja` (seção 7.3).
+    /// Um literal isolado — usado em `const` e `seja`.
     fn parse_literal(&mut self) -> Result<Expr, ErroSintatico> {
         match self.peek().kind.clone() {
             TokenKind::Inteiro(n) => {
@@ -1614,7 +1611,7 @@ mod tests {
 
     #[test]
     fn const_tipo_var_com_procedimentos_aninhados() {
-        // FIM colide com a palavra-chave 'fim' (case-insensitive, seção 1.3).
+        // FIM colide com a palavra-chave 'fim' (case-insensitive).
         // Usa MAXIMO como nome de constante para evitar a colisão.
         let p = parse(r#"programa P
 const
@@ -1823,7 +1820,7 @@ fim"#;
     #[test]
     fn caso_com_chamada_de_procedimento_em_seja_faca() {
         // Padrão das calculadoras do material de origem: 'seja N faça
-        // ROTINA()' — agora exige parênteses (decisão da seção 9.7).
+        // ROTINA()' — agora exige parênteses.
         let fonte = r#"programa P
 
   procedimento ROTSOMA
@@ -1916,7 +1913,7 @@ fim"#;
     #[test]
     fn escreva_ln_sozinho_sem_itens_antes_de_fim_se() {
         // 'escreva_ln' seguido imediatamente de 'fim_se' — nenhum item,
-        // apenas a quebra de linha (seção 6.2.2).
+        // apenas a quebra de linha.
         let fonte = r#"programa P
 var
   X : inteiro
@@ -2011,7 +2008,7 @@ fim"#;
         // se ((A >= 20) .e. (A <= 90) .ou. .não. B .xou. C) então
         //
         // Nota: 'se' exige que TODA a condição esteja entre um único par de
-        // parênteses (seção 7.1) — os parênteses em '(A >= 20)' e '(A <= 90)'
+        // parênteses — os parênteses em '(A >= 20)' e '(A <= 90)'
         // são agrupamentos internos opcionais, não a delimitação do 'se'.
         let fonte = r#"programa P
 var
@@ -2113,7 +2110,7 @@ fim"#;
 
     #[test]
     fn dimensione_matriz_2d() {
-        // Questão #7 (seção 13): sintaxe para 'dimensione' com mais de uma
+        // Questão #7: sintaxe para 'dimensione' com mais de uma
         // dimensão — vírgula separa pares <início>..<fim>, consistente com
         // a declaração de tipo 'conjunto [1..N, 1..M] de <tipo>'.
         let fonte = r#"programa MATRIZ_2D
@@ -2203,7 +2200,7 @@ fim"#;
 
     #[test]
     fn procedimento_com_parametros_padrao_a() {
-        // CALC_FAT_V2 (✅ v0.10: marcador de referência é 'ref')
+        // CALC_FAT_V2 (marcador de referência é 'ref')
         let fonte = r#"programa P
 
   procedimento FATORIAL(N : inteiro; ref FAT : inteiro)
@@ -2261,7 +2258,7 @@ fim"#;
     fn chamada_de_procedimento_sem_parenteses_e_erro_didatico() {
         // Decisão: '()' é sempre obrigatório em chamadas, mesmo sem
         // argumentos — revoga a permissividade anterior de aceitar
-        // 'TROCA' sozinho, sem parênteses, como comando (seção 9.7).
+        // 'TROCA' sozinho, sem parênteses, como comando.
         let fonte = r#"programa P
 
   procedimento TROCA
@@ -2296,7 +2293,7 @@ fim"#;
 
     #[test]
     fn marcador_ref_para_passagem_por_referencia() {
-        // ✅ v0.10: 'ref' marca passagem por referência (seção 9.3) — mais
+        // 'ref' marca passagem por referência — mais
         // curto que 'referencia'/'var', sem colidir com a seção 'var' de
         // declarações.
         let fonte = r#"programa P
@@ -2322,7 +2319,7 @@ fim"#;
 
     #[test]
     fn marcador_vlr_e_opcional_e_redundante() {
-        // ✅ v0.10: 'vlr' marca passagem por valor explicitamente, mas é
+        // 'vlr' marca passagem por valor explicitamente, mas é
         // puramente redundante — 'vlr X : inteiro' e 'X : inteiro' devem
         // produzir exatamente o mesmo Parametro (por_referencia: false).
         let fonte = r#"programa P
@@ -2538,7 +2535,7 @@ fim"#;
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10) — Fase 1: classe sem herança
+    // Programação Orientada a Objetos: classe sem herança
     // =====================================================================================
 
     #[test]
@@ -2659,7 +2656,7 @@ fim"#;
 
     #[test]
     fn classe_com_heranca_multipla() {
-        // Exemplo de referência do autor (Fase 6 — seção 10.1): uma
+        // Exemplo de referência do autor: uma
         // classe derivada de duas bases diretas, cada uma repetindo a
         // palavra 'de' depois da vírgula.
         let fonte = r#"programa P
@@ -2713,7 +2710,7 @@ fim"#;
 
     #[test]
     fn qualificador_de_base_em_expressao_e_reconhecido() {
-        // Fase 6 (herança múltipla, seção 10.1/10.6.1): 'CLS_BASE..OBJETO.CAMPO'
+        // Herança múltipla: 'CLS_BASE..OBJETO.CAMPO'
         // desambigua de qual base vem o acesso. Aqui só testamos o
         // parsing — a resolução semântica de fato é responsabilidade do
         // checker.

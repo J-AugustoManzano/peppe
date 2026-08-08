@@ -1,9 +1,15 @@
+//! Programa ...: PEPPE (Português Estruturado Para Programação Educacional)
+//! Autor ......: Augusto Manzano
+//! Data .......: agosto de 2026
+//! Versão .....: 0.1.0
+//! Release ....: beta
+//!
 //! `peppe-cli` — interface de linha de comando do interpretador PEPPE.
 //!
 //! O CLI roda a pipeline completa sobre o arquivo `.pe` informado: lexer ->
 //! parser -> verificador semântico (`checker`) -> interpretador. Se a
 //! análise (lexer/parser/checker) encontrar qualquer erro, a execução não
-//! começa — todos os erros são mostrados de uma vez (seção 15). Se a
+//! começa — todos os erros são mostrados de uma vez. Se a
 //! análise passar, o programa é executado de fato, lendo `leia`/`leia_seco`
 //! de `stdin` e escrevendo `escreva` em `stdout`.
 //!
@@ -36,9 +42,18 @@ fn main() -> ExitCode {
 
     let fonte = match fs::read(&caminho) {
         Ok(bytes) => {
+            // Tenta UTF-8 primeiro (padrão moderno). Se falhar, trata como
+            // Windows-1252 (ANSI, padrão do Bloco de Notas no Windows) —
+            // cada byte 0x00-0x7F é idêntico ao UTF-8; bytes 0x80-0xFF são
+            // mapeados para os caracteres Windows-1252 correspondentes via
+            // a tabela padrão (ISO 8859-1 + extensão da faixa 0x80-0x9F).
+            // Isso garante que arquivos salvos em qualquer codificação comum
+            // no Windows funcionem sem que o aluno precise configurar nada.
             match String::from_utf8(bytes) {
                 Ok(conteudo) => conteudo,
                 Err(e) => {
+                    // Converte Windows-1252 → UTF-8 mapeando cada byte
+                    // individualmente pelo mapa oficial do W3C/Unicode.
                     let bytes = e.into_bytes();
                     bytes.iter().map(|&b| cp1252_para_char(b)).collect()
                 }
@@ -100,6 +115,8 @@ fn main() -> ExitCode {
     match interpretar(&programa, &mut console) {
         Ok(()) => ExitCode::SUCCESS,
         Err(erro) => {
+            // Garante que toda saída pendente (sem '\n' final) apareça
+            // antes da mensagem de erro.
             let _ = io::stdout().flush();
             eprintln!("\n{erro}");
             ExitCode::FAILURE
@@ -114,6 +131,13 @@ enum Modo {
     Executar,
 }
 
+/// Implementação de [`ConsoleIO`] sobre o terminal real (stdin/stdout).
+///
+/// Os comandos CONIO usam sequências de escape ANSI, que
+/// funcionam no Windows Terminal/PowerShell modernos sem dependências
+/// extras; um backend mais robusto via `crossterm` é um refinamento futuro
+/// caso sequências ANSI se mostrem insuficientes (ex.: Prompt de Comando
+/// antigo sem suporte a ANSI habilitado).
 struct ConsoleTerminal {
     stdin_eh_terminal: bool,
 }
@@ -140,7 +164,11 @@ impl ConsoleIO for ConsoleTerminal {
     }
 
     fn ler_linha_sem_eco(&mut self) -> String {
-        let _ = self.stdin_eh_terminal;
+        // Leitura sem eco real exigiria desabilitar o modo "echo" do
+        // terminal (via crossterm ou WinAPI/termios) — fora de escopo nesta
+        // etapa. Por ora comporta-se como 'leia' normal (com eco), tanto em
+        // terminal interativo quanto com entrada via pipe/redirecionamento.
+        let _ = self.stdin_eh_terminal; // reservado para a implementação futura
         self.ler_linha()
     }
 
@@ -178,6 +206,9 @@ impl ConsoleIO for ConsoleTerminal {
     }
 }
 
+/// Converte a paleta PEPPE (0–15, estilo Turbo Pascal CRT ) para
+/// o código ANSI de cor de texto correspondente (30–37 normais, 90–97
+/// "bright", seguindo a mesma ordem de matiz 0–7).
 fn codigo_ansi_frente(cor: i64) -> i64 {
     let c = cor.clamp(0, 15);
     if c < 8 {
@@ -196,6 +227,11 @@ fn codigo_ansi_fundo(cor: i64) -> i64 {
     }
 }
 
+/// Converte um byte Windows-1252 para o `char` Unicode correspondente.
+/// A faixa 0x00–0x7F é idêntica ao ASCII/UTF-8. A faixa 0xA0–0xFF é
+/// idêntica ao Latin-1 (ISO 8859-1). Só a faixa 0x80–0x9F difere —
+/// ela contém caracteres tipográficos do Windows que não existem no
+/// Latin-1 puro (€, †, ‡, …, etc.). Tabela oficial: <https://www.w3.org/TR/encoding/#names-and-labels>
 fn cp1252_para_char(byte: u8) -> char {
     match byte {
         0x80 => '\u{20AC}', // €
@@ -233,7 +269,15 @@ fn cp1252_para_char(byte: u8) -> char {
     }
 }
 
+/// Exibe a tela de crédito/ajuda com logo ASCII em degradê azul escuro → ciano → branco.
+/// Usa cores ANSI RGB de 24 bits (`\x1b[38;2;R;G;Bm`) — funciona em qualquer
+/// terminal moderno (Windows Terminal, VS Code, ConEmu, etc.).
 fn exibir_tela_credito() {
+    // Cada caractere da linha recebe uma cor interpolada da esquerda (azul escuro)
+    // para a direita (quase branco), passando pelo ciano.
+    // Azul escuro: R=20  G=60  B=180
+    // Ciano:       R=0   G=200 B=220
+    // Branco:      R=220 G=240 B=255
     let linhas_logo = [
         ":::::::::   ::::::::::  :::::::::   :::::::::   ::::::::::",
         "+:+    +:+  +:+         +:+    +:+  +:+    +:+  +:+            Português  ",

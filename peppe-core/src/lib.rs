@@ -1,21 +1,27 @@
+//! Programa ...: PEPPE (Português Estruturado Para Programação Educacional)
+//! Autor ......: Augusto Manzano
+//! Data .......: agosto de 2026
+//! Versão .....: 0.1.0
+//! Release ....: beta
+//!
 //! `peppe-core` — biblioteca central da linguagem PEPPE
 //! (Português Estruturado Para Programação Educacional).
 //!
 //! Esta crate concentra toda a lógica independente de I/O: lexer, parser,
-//! verificador semântico e interpretador (seção 17.1 da especificação).
+//! verificador semântico e interpretador (da especificação).
 //! Tanto o `peppe-cli` quanto futuras interfaces (IDE, LSP, playground web
 //! via WASM) reutilizam este crate sem reescrita.
 //!
-//! ## Status
-//! - ✅ `lexer` — tokenizador completo (seção 1–6 da especificação)
-//! - ✅ `ast` — nós da AST para o núcleo estrutural (seções 1–9)
-//! - ✅ `parser` — parser recursivo-descendente do núcleo estrutural (seções 1–9)
-//! - ✅ `tipos` — tipos resolvidos e regras de compatibilidade/coerção (seção 10.5)
-//! - ✅ `checker` — verificador semântico completo (seção 15): declarações,
-//!   comandos e expressões
-//! - ✅ `interpreter` — interpretador *tree-walking* do núcleo estrutural
-//!   (seções 1–9); `ir_para`/rótulos e `tente`/`captura` (seção 20.1) ainda
-//!   não implementados
+//! ## Módulos
+//! - `lexer` — tokenizador
+//! - `ast` — nós da AST para o núcleo estrutural 
+//! - `parser` — parser recursivo-descendente do núcleo estrutural 
+//! - `tipos` — tipos resolvidos e regras de compatibilidade/coerção
+//! - `checker` — verificador semântico: declarações, comandos e
+//!   expressões
+//! - `interpreter` — interpretador *tree-walking* do núcleo estrutural
+//!   ; `ir_para`/rótulos e `tente`/`captura` não
+//!   são suportados
 
 pub mod ast;
 pub mod checker;

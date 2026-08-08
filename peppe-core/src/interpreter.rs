@@ -1,19 +1,19 @@
 //! Interpretador *tree-walking* da linguagem PEPPE — núcleo estrutural
-//! (seções 1–9 da especificação).
+//! Núcleo estrutural da linguagem.
 //!
 //! Este módulo assume que o programa já passou pelo verificador semântico
 //! (`checker.rs`) sem erros — ele não duplica checagens de tipo "estáticas"
 //! (variável não declarada, operador incompatível, etc.); seu trabalho é
 //! **executar**, e detectar apenas os erros que só podem ocorrer em tempo
 //! de execução (divisão por zero, índice fora dos limites, etc. — ver
-//! [`ErroExecucao`] e a seção 20.1 da especificação, "tratamento de erros
-//! em tempo de execução", ainda em aberto quanto à recuperação via
-//! `tente`/`captura`; por ora todo [`ErroExecucao`] é fatal).
+//! [`ErroExecucao`]). O tratamento de erros em tempo de execução ainda
+//! está em aberto quanto à recuperação via `tente`/`captura`; por ora
+//! todo [`ErroExecucao`] é fatal.
 //!
 //! ## Arquitetura
 //!
 //! - [`Valor`] — o valor em tempo de execução de cada tipo primitivo, mais
-//!   `Registro` (mapa de campos, cópia por valor — seção 10.5) e `Conjunto`
+//!   `Registro` (mapa de campos, cópia por valor ) e `Conjunto`
 //!   (array N-dimensional "achatado" em um `Vec<Valor>` + as dimensões,
 //!   cópia por valor exceto quando acessado por referência via parâmetro
 //!   `ref`).
@@ -23,7 +23,7 @@
 //!   célula entre chamador e chamado — é assim que `FATORIAL(N, RESP)`
 //!   com `RESP` por referência consegue alterar a variável do chamador.
 //! - [`Ambiente`] — pilha de escopos (`Vec<HashMap<String, Celula>>`),
-//!   *case-insensitive* (seção 1.3), espelhando a [`crate::checker::TabelaSimbolos`]
+//!   *case-insensitive*, espelhando a [`crate::checker::TabelaSimbolos`]
 //!   mas guardando valores em vez de tipos.
 //! - [`Interpretador`] — o avaliador propriamente dito: `executar_programa`,
 //!   `executar_bloco`/`executar_comando` (com [`FluxoControle`] para
@@ -49,15 +49,15 @@ use std::rc::Rc;
 pub enum Valor {
     Inteiro(i64),
     Real(f64),
-    /// `cadeia` — qualquer comprimento, incluindo vazio (seção 3).
+    /// `cadeia` — qualquer comprimento, incluindo vazio.
     Cadeia(String),
-    /// `caractere` — sempre exatamente 1 caractere Unicode (seção 3); a
+    /// `caractere` — sempre exatamente 1 caractere Unicode; a
     /// validação de "exatamente 1" é responsabilidade de quem constrói o
-    /// valor (ex.: o *cast* `caractere(x)`, seção 10.5.1), não desta enum.
+    /// valor (ex.: o *cast* `caractere(x)`), não desta enum.
     Caractere(char),
     Logico(bool),
     /// `registro` — mapa de campo (grafia original) -> célula. Cópia por
-    /// valor (seção 10.5): clonar um `Valor::Registro` clona o `HashMap`
+    /// valor: clonar um `Valor::Registro` clona o `HashMap`
     /// inteiro e cada célula é re-alocada (nunca compartilhada entre duas
     /// cópias independentes do registro).
     Registro(HashMap<String, Celula>),
@@ -74,7 +74,7 @@ pub enum Valor {
     /// re-resolver o tipo declarado da variável a partir do nome (o que
     /// exigiria rastrear escopo/tipo por nome separadamente).
     Conjunto { dimensoes: Vec<(i64, i64)>, elementos: Vec<Celula>, elemento_padrao: Box<Valor> },
-    /// Instância de `classe` (seção 10.2/10.4) — **semântica de
+    /// Instância de `classe` — **semântica de
     /// referência**, diferente de `Registro`/`Conjunto`: `Rc<RefCell<...>>`
     /// compartilhado entre todas as cópias do `Valor`. Atribuir uma
     /// variável de tipo-classe a outra (`REF ← OBJ2`) clona apenas o
@@ -85,11 +85,11 @@ pub enum Valor {
     /// `REF` aponta ora para `OBJ1`, ora para `OBJ2`, sem nunca copiar).
     /// `classe` guarda o nome da classe **concreta** da instância (não o
     /// tipo declarado da variável que a referencia) — é o que permite
-    /// dispatch dinâmico de método nas próximas fases (seção 10.6):
+    /// dispatch dinâmico de método nas próximas fases:
     /// mesmo que a variável seja declarada como `Pai`, se a instância
     /// nela for de `Filho`, é o método de `Filho` que executa.
     Objeto { classe: String, campos: Rc<RefCell<HashMap<String, Celula>>> },
-    /// Referência a função de primeira classe (seção 10.5.3) —
+    /// Referência a função de primeira classe —
     /// resultado de atribuir um nome de função sem chamar (`X ←
     /// SOMATORIO`) ou um método de instância sem chamar (`X ←
     /// OBJETO.MÉTODO`) a uma variável de tipo `função`. `receptor =
@@ -98,7 +98,7 @@ pub enum Valor {
     /// momento da atribuição (clonar um `Objeto` clona só o `Rc`
     /// interno, então isso preserva a identidade real da instância:
     /// mutações posteriores nela continuam visíveis através da
-    /// referência, e dispatch dinâmico, seção 10.6, funciona igual a
+    /// referência, e dispatch dinâmico, funciona igual a
     /// uma chamada direta — `Self::avaliar_metodo` resolve sempre pela
     /// classe real do objeto, nunca pelo tipo declarado de quem o
     /// capturou).
@@ -106,7 +106,7 @@ pub enum Valor {
 }
 
 impl Valor {
-    /// Nome do tipo para mensagens de erro de execução (seção 15.3, estilo
+    /// Nome do tipo para mensagens de erro de execução (estilo
     /// consistente com `TipoResolvido::nome_exibicao`).
     pub fn nome_tipo(&self) -> String {
         match self {
@@ -118,7 +118,7 @@ impl Valor {
             Valor::Registro(_) => "registro".to_string(),
             Valor::Conjunto { .. } => "conjunto".to_string(),
             // Nome de exibição é o nome da classe, não a palavra "objeto"
-            // — mais útil em mensagens de erro (seção 15.3), e consistente
+            // — mais útil em mensagens de erro, e consistente
             // com TipoResolvido::Classe::nome_exibicao (que também usa o
             // nome da classe).
             Valor::Objeto { classe, .. } => classe.clone(),
@@ -146,7 +146,7 @@ impl Valor {
                     .collect(),
                 elemento_padrao: Box::new(elemento_padrao.clonar_por_valor()),
             },
-            // 'Objeto' (seção 10.2/10.4) cai aqui de propósito: clonar um
+            // 'Objeto' cai aqui de propósito: clonar um
             // Valor::Objeto via derive(Clone) clona apenas o Rc interno
             // (Rc::clone barato, mesmos dados compartilhados) — é
             // exatamente a semântica de referência que uma instância de
@@ -157,7 +157,7 @@ impl Valor {
     }
 }
 
-/// Exibição textual de um valor para `escreva` (seção 6.2/6.2.2/6.2.3).
+/// Exibição textual de um valor para `escreva`.
 /// Formatação com largura/decimais (`:8:2`) é responsabilidade de quem
 /// chama `escreva`, não desta função — aqui é só a representação "padrão".
 impl fmt::Display for Valor {
@@ -167,7 +167,7 @@ impl fmt::Display for Valor {
             Valor::Real(n) => write!(f, "{n}"),
             Valor::Cadeia(s) => write!(f, "{s}"),
             Valor::Caractere(c) => write!(f, "{c}"),
-            // ✅ seção 6.2.3: saída com pontos, maiúsculas — simétrico aos
+            // Seção 6.2.3: saída com pontos, maiúsculas — simétrico aos
             // literais de entrada '.Verdadeiro./.Falso.'.
             Valor::Logico(true) => write!(f, ".VERDADEIRO."),
             Valor::Logico(false) => write!(f, ".FALSO."),
@@ -192,9 +192,9 @@ pub fn nova_celula(valor: Valor) -> Celula {
 // Ambiente (pilha de escopos)
 // =====================================================================================
 
-/// Pilha de escopos *case-insensitive* (seção 1.3) — mesma estrutura de
+/// Pilha de escopos *case-insensitive* — mesma estrutura de
 /// [`crate::checker::TabelaSimbolos`], mas associando nomes a [`Celula`]s
-/// em vez de tipos. `Clone` é raso e barato (seção 9.6): cada [`Celula`]
+/// em vez de tipos. `Clone` é raso e barato: cada [`Celula`]
 /// é um `Rc`, então clonar um `Ambiente` clona só os mapas/contadores de
 /// referência, nunca os `Valor`es por dentro — duas cópias do mesmo
 /// `Ambiente` continuam compartilhando exatamente as mesmas células.
@@ -220,14 +220,14 @@ impl Ambiente {
     /// Declara `nome` no escopo **atual**, associando-o a `celula`. Usado
     /// tanto para `var X : tipo` (nova célula com valor padrão) quanto para
     /// parâmetros (célula nova, cópia por valor, ou célula compartilhada do
-    /// chamador, para `ref` — seção 9.3).
+    /// chamador, para `ref` ).
     pub fn declarar(&mut self, nome: &str, celula: Celula) {
         let chave = nome.to_lowercase();
         self.escopos.last_mut().expect("sempre há ao menos o escopo global").insert(chave, celula);
     }
 
     /// Busca a célula de `nome`, do escopo atual até o global
-    /// (case-insensitive, lexical scoping — seção 9.6).
+    /// (case-insensitive, lexical scoping ).
     pub fn buscar(&self, nome: &str) -> Option<Celula> {
         let chave = nome.to_lowercase();
         self.escopos.iter().rev().find_map(|e| e.get(&chave)).cloned()
@@ -241,7 +241,7 @@ impl Default for Ambiente {
 }
 
 // =====================================================================================
-// E/S de console — abstraída via trait (seção 6)
+// E/S de console — abstraída via trait
 // =====================================================================================
 
 /// Abstrai `leia`/`escreva`/`leia_seco`/`pausa`/CONIO, para permitir tanto
@@ -249,19 +249,19 @@ impl Default for Ambiente {
 /// console "falso" nos testes (entrada pré-programada, saída capturada em
 /// um `String`).
 ///
-/// `leia`/`leia_seco` retornam a linha **sem** o terminador de fim de linha
-/// (o "consome a linha inteira, incluindo o Enter" da seção 6.1 já é
+/// `leia`/`leia_seco` retornam a linha **sem** o terminador de fim de
+/// linha (consumir a linha inteira, incluindo o Enter, já é
 /// responsabilidade de quem implementa a trait).
 pub trait ConsoleIO {
     fn escrever(&mut self, texto: &str);
     fn ler_linha(&mut self) -> String;
-    /// Leitura sem eco (seção 6.3) — em um console real, desabilita o eco
+    /// Leitura sem eco — em um console real, desabilita o eco
     /// do terminal durante a leitura; em testes, comporta-se como
     /// [`Self::ler_linha`].
     fn ler_linha_sem_eco(&mut self) -> String {
         self.ler_linha()
     }
-    /// `pausa` (seção 6.4) — por padrão, apenas descarta uma linha.
+    /// `pausa` — por padrão, apenas descarta uma linha.
     fn pausar(&mut self) {
         self.ler_linha();
     }
@@ -299,7 +299,7 @@ impl ConsoleIO for ConsoleMemoria {
 }
 
 // =====================================================================================
-// Erros de execução (seção 20.1 — todo erro de execução é fatal por ora)
+// Erros de execução (todo erro de execução é fatal por ora)
 // =====================================================================================
 
 /// Um erro que só pode ser detectado em tempo de execução (o verificador
@@ -307,7 +307,7 @@ impl ConsoleIO for ConsoleMemoria {
 /// índice fora dos limites, recursão sem caso de parada (estouro de pilha,
 /// detectado via contador, não via SO), etc.
 ///
-/// **Decisão pendente (seção 20.1):** por ora, todo [`ErroExecucao`] é
+/// **Decisão pendente:** por ora, todo [`ErroExecucao`] é
 /// fatal — interrompe a execução do programa. Introduzir recuperação
 /// (`tente`/`captura`) é um refinamento futuro, não implementado aqui.
 #[derive(Debug, Clone, PartialEq)]
@@ -335,13 +335,13 @@ fn erro(linha: usize, mensagem: impl Into<String>) -> ErroExecucao {
 /// executado e a execução normal do bloco/laço/sub-rotina atual deve parar.
 enum FluxoControle {
     /// `interrompa` ou `saia_caso` com condição verdadeira — para o laço
-    /// mais interno (seção 8).
+    /// mais interno.
     Interromper,
     /// `continue` — pula para a próxima iteração do laço mais interno.
     Continuar,
-    /// `ir_para RÓTULO` (seção 8) — propaga subindo pela pilha de blocos
+    /// `ir_para RÓTULO` — propaga subindo pela pilha de blocos
     /// até encontrar o bloco que efetivamente contém esse rótulo (em
-    /// qualquer posição, antes ou depois do `ir_para` — seção 8 permite
+    /// qualquer posição, antes ou depois do `ir_para`  permite
     /// saltos "para a frente" e "para trás"), que então reinicia sua
     /// execução a partir dali. O checker já garante que o rótulo existe
     /// em algum bloco da sub-rotina atual (não cruza para outra
@@ -367,7 +367,7 @@ pub fn interpretar(programa: &Programa, console: &mut dyn ConsoleIO) -> Result<(
     let mut ambiente = Ambiente::novo();
     // Ao declarar as 'var'/'const' de topo em ordem, `declarar_topo`
     // também captura — como efeito colateral — o escopo de fechamento
-    // (seção 9.6) de cada sub-rotina de nível de topo, exatamente no
+    // de cada sub-rotina de nível de topo, exatamente no
     // ponto em que aparece no texto (ver documentação da função).
     interp.declarar_topo(&programa.declaracoes, &mut ambiente)?;
     if let Some(FluxoControle::SaltarPara(rotulo)) =
@@ -388,7 +388,7 @@ pub fn interpretar(programa: &Programa, console: &mut dyn ConsoleIO) -> Result<(
 
 /// Nome "de exibição" de um [`Tipo`] (AST, não resolvido) — suficiente
 /// para comparar com [`Valor::nome_tipo`] na resolução de sobrecarga em
-/// runtime (seção 10.5, [`Interpretador::resolver_sobrecarga_runtime`]).
+/// runtime ([`Interpretador::resolver_sobrecarga_runtime`]).
 /// Cobre só os casos que fazem sentido como tipo de parâmetro de uma
 /// sub-rotina/método: primitivos e nomes de tipo (alias, registro,
 /// classe — todos identificados pelo próprio nome declarado, igual ao
@@ -412,10 +412,9 @@ fn nome_tipo_declarado(tipo: &Tipo) -> String {
 }
 
 /// Tabela de sub-rotinas indexada por nome em minúsculas (case-insensitive
-/// — seção 1.3), montada uma vez a partir da AST do programa.
+/// ), montada uma vez a partir da AST do programa.
 struct Interpretador<'p> {
-    /// Uma ou mais sub-rotinas para o mesmo nome (seção 10.5 —
-    /// sobrecarga ad-hoc): o caso comum é um vetor de tamanho 1; com
+    /// Uma ou mais sub-rotinas para o mesmo nome (    /// sobrecarga ad-hoc): o caso comum é um vetor de tamanho 1; com
     /// sobrecarga, `avaliar_chamada`/`executar_comando` re-resolvem qual
     /// elemento usar a partir dos valores reais dos argumentos (ver
     /// [`Interpretador::resolver_sobrecarga_runtime`]) — o checker já
@@ -428,13 +427,13 @@ struct Interpretador<'p> {
     /// (classe em minúsculas, método em minúsculas) -> implementações —
     /// tanto `MetodoInterno` (corpo dentro de `classe ... fim_classe`)
     /// quanto [`DeclaracaoTopo::MetodoExterno`] caem aqui, indistintamente
-    /// (seção 10.3). Vetor por causa de sobrecarga (seção 10.5), mesma
+    ///. Vetor por causa de sobrecarga, mesma
     /// observação de [`Self::sub_rotinas`]. Métodos não têm escopo de
-    /// fechamento Pascal (seção 9.6) — seus únicos "globais" são os
+    /// fechamento Pascal — seus únicos "globais" são os
     /// campos da própria instância (`este`), resolvidos separadamente em
     /// `Self::avaliar_metodo`, então aqui basta a referência direta.
     ///
-    /// Nota sobre dispatch dinâmico (seção 10.6): `avaliar_metodo` busca
+    /// Nota sobre dispatch dinâmico: `avaliar_metodo` busca
     /// a implementação a partir da classe **real** da instância (o
     /// campo `classe` dentro de `Valor::Objeto`), nunca do tipo
     /// declarado da variável no AST — então uma vez que o checker
@@ -443,7 +442,7 @@ struct Interpretador<'p> {
     /// desta tabela, sem precisar consultar o modificador em tempo de
     /// execução.
     metodos: HashMap<(String, String), Vec<&'p SubRotina>>,
-    /// ESCOPO DE FECHAMENTO (seção 9.6, estilo Pascal) de cada
+    /// ESCOPO DE FECHAMENTO (estilo Pascal) de cada
     /// sub-rotina — chave por identidade de ponteiro (duas sobrecargas
     /// nunca compartilham endereço). Cada entrada é um SNAPSHOT
     /// (clone raso — mesmas células, nunca recriadas) do ambiente
@@ -569,8 +568,8 @@ impl<'p> Interpretador<'p> {
 
 
     /// Constrói o valor padrão de uma instância da classe `nome_classe`
-    /// (seção 10.1/10.2/10.4, Fase 6 — múltiplas bases diretas): percorre
-    /// toda a árvore de herança a partir de `nome_classe` (cada classe
+    /// (múltiplas bases diretas): percorre toda
+    /// a árvore de herança a partir de `nome_classe` (cada classe
     /// pode ter mais de uma base direta) coletando os campos de cada
     /// nível — uma instância é "plana", contém todos os campos
     /// achatados, próprios e herdados, em um único `HashMap` por nome —
@@ -579,7 +578,7 @@ impl<'p> Interpretador<'p> {
     /// classe no momento da chamada (`avaliar_metodo`), não armazenados
     /// na instância.
     ///
-    /// ⚠️ **Limitação conhecida (Fase 6):** como a instância usa um
+    /// ⚠️ **Limitação conhecida:** como a instância usa um
     /// único `HashMap<String, Celula>` indexado por nome de campo, não
     /// há como representar duas células distintas para o mesmo nome
     /// vindo de duas bases diferentes (diamond problem sem herança
@@ -619,7 +618,7 @@ impl<'p> Interpretador<'p> {
         })
     }
 
-    /// Percorre a árvore de herança a partir de `nome_classe` (Fase 6),
+    /// Percorre a árvore de herança a partir de `nome_classe`,
     /// empilhando em `cadeia` os membros de cada classe visitada — usado
     /// por [`Self::valor_padrao_classe`]. `caminho` evita recursão
     /// infinita em caso de ciclo de herança (não deveria acontecer — o
@@ -652,8 +651,8 @@ impl<'p> Interpretador<'p> {
     }
 
     /// Busca as sobrecargas de `nome_metodo` em `nome_classe` ou em
-    /// qualquer base (direta ou indireta, Fase 6 — múltiplas bases
-    /// diretas), parando no primeiro nível da árvore onde o nome
+    /// qualquer base (direta ou indireta — múltiplas bases diretas),
+    /// parando no primeiro nível da árvore onde o nome
     /// existir em **qualquer** caminho — o checker já validou, antes da
     /// execução, que não há ambiguidade não-qualificada para nenhuma
     /// chamada que chegue até aqui, então (diferente do equivalente no
@@ -705,11 +704,11 @@ impl<'p> Interpretador<'p> {
         }
     }
 
-    /// Constrói o valor padrão de `tipo` (seção 4: variáveis recém
+    /// Constrói o valor padrão de `tipo` (variáveis recém
     /// declaradas começam com um valor "zero" do seu tipo) — `0`/`0.0`/
     /// `""`/`' '`/`.falso.`, `registro` com cada campo no seu valor padrão,
     /// `conjunto` com cada dimensão estática já alocada (dimensões
-    /// dinâmicas, seção 4.5.1, começam vazias até `dimensione`), instância
+    /// dinâmicas, começam vazias até `dimensione`), instância
     /// de `classe` com todos os campos (próprios e herdados, seção
     /// 10.1/10.2) em seus valores padrão.
     fn valor_padrao(&self, tipo: &Tipo, ambiente: &Ambiente) -> Result<Valor, ErroExecucao> {
@@ -750,7 +749,7 @@ impl<'p> Interpretador<'p> {
                             limites.push((ini, fim));
                         }
                         // Dimensão dinâmica ainda não dimensionada: tamanho
-                        // 0 até o 'dimensione' (seção 4.5.1).
+                        // 0 até o 'dimensione'.
                         None => limites.push((1, 0)),
                     }
                 }
@@ -802,7 +801,7 @@ impl<'p> Interpretador<'p> {
     }
 
     /// Avalia uma expressão que deve ser constante neste ponto da execução
-    /// (limites de `conjunto` estático, seção 4.5) e a converte para
+    /// (limites de `conjunto` estático) e a converte para
     /// `i64`. Usado apenas na construção de valores padrão.
     fn avaliar_expr_const(&self, expr: &Expr, ambiente: &Ambiente) -> Result<i64, ErroExecucao> {
         match self.avaliar_expr_sem_console(expr, ambiente)? {
@@ -831,7 +830,7 @@ impl<'p> Interpretador<'p> {
     }
 
     // =================================================================================
-    // Declarações de nível superior (seção 4/9) — aloca células no ambiente
+    // Declarações de nível superior — aloca células no ambiente
     // =================================================================================
 
     /// Declara `const`/`var` no `ambiente` atual (sub-rotinas já foram
@@ -839,7 +838,7 @@ impl<'p> Interpretador<'p> {
     /// célula — são chamadas pela AST, não por valor em uma variável).
     /// Declara `const`/`var` de `declaracoes` em `ambiente`, na ordem em
     /// que aparecem. Ao encontrar uma `DeclaracaoTopo::SubRotina`,
-    /// CAPTURA o ESCOPO DE FECHAMENTO dela (seção 9.6, estilo Pascal):
+    /// CAPTURA o ESCOPO DE FECHAMENTO dela (estilo Pascal):
     /// um snapshot (clone raso de `ambiente` — mesmas células, nunca
     /// recriadas) exatamente como está nesse instante, guardado em
     /// `self.fechamentos` por identidade de ponteiro da sub-rotina. Como
@@ -892,7 +891,7 @@ impl<'p> Interpretador<'p> {
         lvalue: &LValue,
         ambiente: &Ambiente,
     ) -> Result<Celula, ErroExecucao> {
-        // Constantes pré-definidas (seção 5.6) — não entram no ambiente
+        // Constantes pré-definidas — não entram no ambiente
         // de execução, mas são reconhecidas aqui antes de reportar erro.
         let mut celula = match ambiente.buscar(&lvalue.nome) {
             Some(c) => c,
@@ -931,7 +930,7 @@ impl<'p> Interpretador<'p> {
                         }
                         // O HashMap de uma instância de classe já contém
                         // TODOS os campos achatados, incluindo os
-                        // herdados (seção 10.1/10.4) — 'valor_padrao'
+                        // herdados — 'valor_padrao'
                         // monta a instância assim, então não há lógica
                         // de herança a percorrer aqui em tempo de
                         // execução, só uma busca direta por nome (igual
@@ -964,7 +963,7 @@ impl<'p> Interpretador<'p> {
                 }
                 Acesso::Metodo { .. } => {
                     // Uma chamada de método nunca produz uma "célula"
-                    // encadeável (seção 10.4) — não é um lugar de
+                    // encadeável — não é um lugar de
                     // memória, é a execução de um corpo de sub-rotina
                     // que retorna um valor solto. Quem precisa do
                     // resultado de uma chamada de método usa
@@ -1008,7 +1007,7 @@ impl<'p> Interpretador<'p> {
                                     return Err(erro(
                                         lvalue.linha,
                                         format!(
-                                            "índice fora dos limites em '{}' (seção 15)",
+                                            "índice fora dos limites em '{}' ",
                                             lvalue.nome
                                         ),
                                     ))
@@ -1033,11 +1032,11 @@ impl<'p> Interpretador<'p> {
     }
 
     // =================================================================================
-    // Avaliação de expressões (seção 5)
+    // Avaliação de expressões
     // =================================================================================
 
     /// Avalia `expr` no contexto de uma atribuição cujo destino é de
-    /// tipo `função` (seção 10.5.3) — intercepta os dois casos especiais
+    /// tipo `função` — intercepta os dois casos especiais
     /// de "referência sem chamar" (sub-rotina solta, ou `OBJETO.MÉTODO`
     /// sem parênteses) construindo um [`Valor::ReferenciaFuncao`]; em
     /// qualquer outro caso (ex.: copiar uma variável de tipo função já
@@ -1068,7 +1067,7 @@ impl<'p> Interpretador<'p> {
         // acesso, Acesso::Campo — não chamada). Resolve a célula de
         // OBJETO, confirma que é uma instância de classe, e que
         // 'MÉTODO' de fato existe como método nela (considerando
-        // herança, Fase 6) — senão, é só um campo comum, caminho usual.
+        // herança) — senão, é só um campo comum, caminho usual.
         if let [Acesso::Campo(nome_membro)] = lvalue.acessos.as_slice() {
             let lvalue_objeto = LValue {
                 qualificador_base: lvalue.qualificador_base.clone(),
@@ -1106,7 +1105,7 @@ impl<'p> Interpretador<'p> {
             Expr::Logico(b) => Ok(Valor::Logico(*b)),
 
             Expr::Variavel(lvalue) => {
-                // Caso especial (seção 10.4): se o ÚLTIMO acesso da cadeia
+                // Caso especial: se o ÚLTIMO acesso da cadeia
                 // é uma chamada de método, não há "célula" a resolver
                 // (uma chamada de método não é um lugar de memória) — em
                 // vez disso, resolve a célula do RECEPTOR (tudo antes do
@@ -1123,7 +1122,7 @@ impl<'p> Interpretador<'p> {
                         linha: lvalue.linha,
                     };
                     let celula_objeto = self.resolver_celula(&receptor, ambiente)?;
-                    // O qualificador de escopo (Fase 6) só vale para o
+                    // O qualificador de escopo só vale para o
                     // PRIMEIRO acesso da cadeia (mesma regra do checker,
                     // 'Verificador::tipo_de_lvalue') — só se aplica
                     // aqui se a chamada de método for, ela mesma, o
@@ -1195,7 +1194,7 @@ impl<'p> Interpretador<'p> {
         console: &mut dyn ConsoleIO,
     ) -> Result<Valor, ErroExecucao> {
         // Chamada INDIRETA através de uma variável de tipo função
-        // (seção 10.5.3) — 'RESPOSTA(args)' onde 'RESPOSTA' guarda uma
+        // — 'RESPOSTA(args)' onde 'RESPOSTA' guarda uma
         // referência, não o nome de uma sub-rotina declarada. Despacha
         // para Self::chamar_referencia_funcao, que por sua vez delega
         // para chamar_sub_rotina (sub-rotina solta) ou avaliar_metodo
@@ -1229,11 +1228,11 @@ impl<'p> Interpretador<'p> {
     }
 
     /// Invoca a função/método referenciado por um [`Valor::ReferenciaFuncao`]
-    /// (seção 10.5.3) — `receptor = None` despacha para
+    /// — `receptor = None` despacha para
     /// [`Self::chamar_sub_rotina`] (sub-rotina solta); `receptor =
     /// Some(objeto)` despacha para [`Self::avaliar_metodo`] sobre uma
     /// célula construída a partir do objeto capturado, preservando
-    /// dispatch dinâmico (seção 10.6) exatamente como uma chamada
+    /// dispatch dinâmico exatamente como uma chamada
     /// direta `OBJETO.MÉTODO(...)` — `avaliar_metodo` sempre resolve
     /// pela classe real guardada no `Valor::Objeto`, nunca pelo tipo
     /// declarado de quem capturou a referência.
@@ -1270,7 +1269,7 @@ impl<'p> Interpretador<'p> {
     /// Executa a sub-rotina `nome` com `argumentos` já avaliados no
     /// `ambiente` do chamador. Retorna `Some(valor)` para `função` (o valor
     /// final da célula que representa o nome da função dentro do seu
-    /// próprio escopo, seção 9.2) ou `None` para `procedimento`.
+    /// próprio escopo) ou `None` para `procedimento`.
     fn chamar_sub_rotina(
         &self,
         nome: &str,
@@ -1286,7 +1285,7 @@ impl<'p> Interpretador<'p> {
         // Avalia cada argumento no escopo do CHAMADOR antes de entrar no
         // escopo da sub-rotina (parâmetros não veem o próprio escopo da
         // sub-rotina sendo chamada). Avalia **por valor primeiro**, só
-        // para resolver qual sobrecarga usar (seção 10.5) — seguro mesmo
+        // para resolver qual sobrecarga usar — seguro mesmo
         // para um argumento cujo parâmetro real seja 'ref', porque o
         // checker já garante que esse argumento é sempre uma
         // 'Expr::Variavel' (ler uma variável não tem efeito colateral a
@@ -1313,7 +1312,7 @@ impl<'p> Interpretador<'p> {
             let por_referencia = parametros_expandidos.get(i).map(|p| p.por_referencia).unwrap_or(false);
             if por_referencia {
                 // 'ref': o argumento DEVE ser um lvalue — compartilha a
-                // célula com o chamador (seção 9.3).
+                // célula com o chamador.
                 let Expr::Variavel(lvalue) = arg_expr else {
                     return Err(erro(
                         linha,
@@ -1330,7 +1329,7 @@ impl<'p> Interpretador<'p> {
                 // célula diretamente (sem clonar_por_valor), para que
                 // mutações dentro da sub-rotina sejam visíveis no chamador
                 // (passagem por referência implícita de conjuntos, como em
-                // Lua e outras linguagens — seção 9.3).
+                // Lua e outras linguagens ).
                 let celula_original = self.resolver_celula(lvalue, ambiente_chamador)?;
                 let e_conjunto = matches!(&*celula_original.borrow(), Valor::Conjunto { .. });
                 if e_conjunto {
@@ -1350,7 +1349,7 @@ impl<'p> Interpretador<'p> {
         }
 
         // Monta o ambiente da sub-rotina: parte do ESCOPO DE FECHAMENTO
-        // (seção 9.6, estilo Pascal) já capturado por
+        // (estilo Pascal) já capturado por
         // `Self::declarar_topo` em `self.fechamentos` — um snapshot
         // (clone raso, mesmas células) de tudo que era visível no ponto
         // exato em que 'sub' foi declarada. Sem entrada (sub-rotina sem
@@ -1400,7 +1399,7 @@ impl<'p> Interpretador<'p> {
     }
 
     /// Executa o método `nome_metodo` (encontrado subindo a cadeia de
-    /// herança e resolvendo sobrecarga, seção 10.1/10.4/10.5 — ver
+    /// herança e resolvendo sobrecarga — ver
     /// [`Self::resolver_sobrecarga_runtime`]) sobre a instância guardada
     /// em `celula_objeto`, com `argumentos` avaliados no ambiente do
     /// chamador. Retorna `Some(valor)` para método-função, `None` para
@@ -1408,7 +1407,7 @@ impl<'p> Interpretador<'p> {
     ///
     /// Diferente de uma sub-rotina solta: o ambiente do método começa com
     /// `este` (a própria instância) e **as mesmas células** de cada campo
-    /// do objeto já declaradas diretamente por nome (seção 10.3) — não
+    /// do objeto já declaradas diretamente por nome — não
     /// cópias. Mutar um campo dentro do método (`MÉDIA ← SOMA / 4`)
     /// escreve na célula que vive dentro do `Valor::Objeto`, visível para
     /// qualquer outra referência à mesma instância depois da chamada
@@ -1437,7 +1436,7 @@ impl<'p> Interpretador<'p> {
             }
         };
 
-        // Qualificador de escopo (Fase 6 — seção 10.1/10.6.1): se
+        // Qualificador de escopo: se
         // presente, a busca começa diretamente na classe-base indicada
         // em vez da classe real da instância — o checker já validou
         // que essa base é de fato uma ancestral, e que a busca a partir
@@ -1510,7 +1509,7 @@ impl<'p> Interpretador<'p> {
             }
         }
         let mut ambiente_sub = Ambiente::novo();
-        // 'este' (seção 10.3/10.4): a própria instância, mesma célula que
+        // 'este': a própria instância, mesma célula que
         // o chamador usa — permite 'este.CAMPO' funcionar como qualquer
         // outro acesso a campo de objeto.
         ambiente_sub.declarar("este", celula_objeto.clone());
@@ -1561,7 +1560,7 @@ impl<'p> Interpretador<'p> {
     }
 
 
-    /// Executa `bloco` do início ao fim, e trata `ir_para` (seção 8): se
+    /// Executa `bloco` do início ao fim, e trata `ir_para`: se
     /// um comando filho sinaliza [`FluxoControle::SaltarPara`] e o rótulo
     /// referenciado está em `bloco` (em qualquer posição), a execução
     /// "salta" reiniciando a partir do índice desse rótulo — para a frente
@@ -1576,7 +1575,7 @@ impl<'p> Interpretador<'p> {
     /// para cima), mas não para um rótulo "descendo" dentro de uma
     /// estrutura condicional/laço aninhada a partir de fora dela — uso que
     /// não aparece no material de origem (rótulos lá sempre marcam um
-    /// ponto no fluxo sequencial principal, seção 8). Caso isso se mostre
+    /// ponto no fluxo sequencial principal). Caso isso se mostre
     /// necessário, o checker precisaria também rastrear o caminho exato
     /// (não só a existência) de cada rótulo para validar — refinamento
     /// futuro, não implementado aqui.
@@ -1853,10 +1852,10 @@ impl<'p> Interpretador<'p> {
             }
 
             Comando::ChamadaProcedimento { nome, argumentos, linha } => {
-                // 'RESPOSTA()' como comando solto (seção 10.5.3) — se
+                // 'RESPOSTA()' como comando solto — se
                 // 'nome' for uma variável de referência a função,
                 // descarta o retorno (mesma permissividade de
-                // 'OBJETO.MÉTODO()' como comando, seção 10.4) em vez de
+                // 'OBJETO.MÉTODO()' como comando) em vez de
                 // tentar achar uma sub-rotina chamada 'RESPOSTA'.
                 if let Some(celula) = ambiente.buscar(nome) {
                     let referencia = celula.borrow().clone();
@@ -1877,7 +1876,7 @@ impl<'p> Interpretador<'p> {
             }
 
             Comando::ChamadaMetodo { alvo, linha } => {
-                // 'OBJETO.MÉTODO()' como comando solto (seção 10.4):
+                // 'OBJETO.MÉTODO()' como comando solto:
                 // ignora o valor de retorno, se houver (válido tanto
                 // para 'procedimento' quanto para 'função' usada apenas
                 // pelo efeito colateral). O parser garante que o ÚLTIMO
@@ -2002,9 +2001,9 @@ impl<'p> Interpretador<'p> {
 }
 
 /// Procura `Comando::Rotulo { nome, .. }` em `bloco` cujo nome (case-
-/// insensitive — seção 1.3) seja igual a `rotulo`, e retorna seu índice
+/// insensitive ) seja igual a `rotulo`, e retorna seu índice
 /// dentro do `Vec<Comando>`. Usado por [`Interpretador::executar_bloco`]
-/// para implementar `ir_para` (seção 8).
+/// para implementar `ir_para`.
 fn posicao_do_rotulo(bloco: &Bloco, rotulo: &str) -> Option<usize> {
     bloco.iter().position(|c| matches!(c, Comando::Rotulo { nome, .. } if nome.eq_ignore_ascii_case(rotulo)))
 }
@@ -2033,7 +2032,7 @@ fn indice_linear(
             return Err(erro(
                 linha,
                 format!(
-                    "índice {idx} fora dos limites [{ini}..{fim}] (seção 15 — erro de execução)"
+                    "índice {idx} fora dos limites [{ini}..{fim}] (erro de execução)"
                 ),
             ));
         }
@@ -2044,7 +2043,7 @@ fn indice_linear(
 }
 
 // =====================================================================================
-// Operadores (seção 5) e *casts* (seção 10.5.1)
+// Operadores e *casts*
 // =====================================================================================
 
 fn avaliar_operador_binario(
@@ -2081,21 +2080,21 @@ fn avaliar_operador_binario(
         Multiplicacao => binario_numerico(esquerda, direita, linha, "*", |a, b| a * b),
         Divisao => match (como_f64(&esquerda), como_f64(&direita)) {
             (Some(_), Some(b)) if b == 0.0 => {
-                Err(erro(linha, "divisão por zero (seção 15 — erro de execução)"))
+                Err(erro(linha, "divisão por zero (erro de execução)"))
             }
             (Some(a), Some(b)) => Ok(Real(a / b)),
             _ => Err(erro_operador_runtime("/", &esquerda, &direita, linha)),
         },
         Div => match (&esquerda, &direita) {
             (Inteiro(_), Inteiro(0)) => {
-                Err(erro(linha, "divisão por zero ('div', seção 15 — erro de execução)"))
+                Err(erro(linha, "divisão por zero ('div' — erro de execução)"))
             }
             (Inteiro(a), Inteiro(b)) => Ok(Inteiro(a.div_euclid(*b))),
             _ => Err(erro_operador_runtime("div", &esquerda, &direita, linha)),
         },
         Mod => match (&esquerda, &direita) {
             (Inteiro(_), Inteiro(0)) => {
-                Err(erro(linha, "divisão por zero ('mod', seção 15 — erro de execução)"))
+                Err(erro(linha, "divisão por zero ('mod' — erro de execução)"))
             }
             (Inteiro(a), Inteiro(b)) => Ok(Inteiro(a.rem_euclid(*b))),
             _ => Err(erro_operador_runtime("mod", &esquerda, &direita, linha)),
@@ -2190,7 +2189,7 @@ fn ordem_parcial(a: &Valor, b: &Valor) -> Option<std::cmp::Ordering> {
     }
 }
 
-/// Igualdade estrutural usada por `=`, `<>` e `caso`/`seja` (seção 7.3) —
+/// Igualdade estrutural usada por `=`, `<>` e `caso`/`seja` —
 /// compara por valor, incluindo coerção numérica básica (`1 = 1.0`).
 fn valores_iguais(a: &Valor, b: &Valor) -> bool {
     use Valor::*;
@@ -2241,7 +2240,7 @@ fn avaliar_operador_unario(op: OpUnario, operando: Valor, linha: usize) -> Resul
     }
 }
 
-/// *Cast* explícito (seção 10.5.1) — ambas as sintaxes (`tipo(x)` e
+/// *Cast* explícito — ambas as sintaxes (`tipo(x)` e
 /// `(tipo) x`) já chegam aqui como o mesmo nó `Expr::Cast`.
 fn converter_cast(tipo: TipoPrimitivo, valor: Valor, linha: usize) -> Result<Valor, ErroExecucao> {
     use TipoPrimitivo::*;
@@ -2293,7 +2292,7 @@ fn converter_cast(tipo: TipoPrimitivo, valor: Valor, linha: usize) -> Result<Val
     }
 }
 
-/// Converte a linha lida de `leia`/`leia_seco` (seção 6.1) para o tipo
+/// Converte a linha lida de `leia`/`leia_seco` para o tipo
 /// atual da célula de destino — a PEPPE não tem "leia tipado" explícito:
 /// o tipo já foi fixado na declaração de `var`, e a conversão usa o mesmo
 /// parsing de `converter_cast` quando aplicável.
@@ -2345,7 +2344,7 @@ fn converter_entrada(valor_atual: &Valor, linha_lida: &str, linha: usize) -> Res
         )),
         Valor::ReferenciaFuncao { .. } => Err(erro(
             linha,
-            "'leia' não pode ser usado em uma variável de tipo função (seção 10.5.3) \
+            "'leia' não pode ser usado em uma variável de tipo função  \
              — atribua a referência diretamente (ex.: 'RESPOSTA <- SOMATORIO') \
              (bug do checker?)",
         )),
@@ -2353,10 +2352,10 @@ fn converter_entrada(valor_atual: &Valor, linha_lida: &str, linha: usize) -> Res
 }
 
 /// Formata um item de `escreva` aplicando os especificadores opcionais
-/// `:largura` e `:largura:decimais` (seção 6.2.1) — só `inteiro`/`real`
+/// `:largura` e `:largura:decimais` — só `inteiro`/`real`
 /// suportam largura/decimais; para outros tipos, os especificadores são
 /// ignorados nesta implementação (o checker já impede `:decimais` fora de
-/// `real`, seção 6.2.1).
+/// `real`).
 fn formatar_item_escreva(valor: &Valor, largura: Option<&Valor>, decimais: Option<&Valor>) -> String {
     let largura_n = largura.and_then(|v| match v {
         Valor::Inteiro(n) => Some(*n as usize),
@@ -2378,10 +2377,10 @@ fn formatar_item_escreva(valor: &Valor, largura: Option<&Valor>, decimais: Optio
 }
 
 // =====================================================================================
-// Funções matemáticas pré-definidas (seção 5.6)
+// Funções matemáticas pré-definidas
 // =====================================================================================
 
-/// Se `nome` corresponde a uma função/constante pré-definida (seção 5.6),
+/// Se `nome` corresponde a uma função/constante pré-definida,
 /// avalia os argumentos e retorna `Ok(Some(valor))`. Caso contrário,
 /// `Ok(None)` (o chamador tenta como sub-rotina do usuário). Funções
 /// pré-definidas são sempre "por valor" (nenhuma aceita `ref`).
@@ -2487,7 +2486,7 @@ fn avaliar_predefinida(
             Valor::Inteiro(min + (pseudo_aleatorio_01() * amplitude as f64) as i64)
         }
 
-        // -- Operações de texto (seção 20.2) ---------------------------------------
+        // -- Operações de texto ---------------------------------------
         "tamanho" if args.len() == 1 => {
             Valor::Inteiro(como_cadeia(&args[0], linha)?.chars().count() as i64)
         }
@@ -2519,7 +2518,7 @@ fn avaliar_predefinida(
             Valor::Cadeia(s)
         }
 
-        // -- Funções de caractere (seção 5.6) --------------------------------------
+        // -- Funções de caractere --------------------------------------
         "ord" if args.len() == 1 => {
             let c = match &args[0] {
                 Valor::Caractere(c) => *c,
@@ -2560,7 +2559,7 @@ fn avaliar_predefinida(
 
 /// Converte `v` para `String`, aceitando `cadeia` ou `caractere` (seção
 /// 20.2 — as operações de texto aceitam ambos, por conveniência, igual à
-/// concatenação com `+`, seção 10.5.2).
+/// concatenação com `+`).
 fn como_cadeia(v: &Valor, linha: usize) -> Result<String, ErroExecucao> {
     match v {
         Valor::Cadeia(s) => Ok(s.clone()),
@@ -2572,8 +2571,8 @@ fn como_cadeia(v: &Valor, linha: usize) -> Result<String, ErroExecucao> {
     }
 }
 
-/// `copia(S, inicio, quantidade)` (seção 20.2) — `inicio` é 1-based
-/// (convenção PEPPE, igual aos índices de `conjunto`, seção 4.5). Erro de
+/// `copia(S, inicio, quantidade)` — `inicio` é 1-based
+/// (convenção PEPPE, igual aos índices de `conjunto`). Erro de
 /// execução se `inicio` estiver fora dos limites de `S`; `quantidade` é
 /// automaticamente limitada ao que resta em `S` a partir de `inicio` (não
 /// é erro pedir mais caracteres do que existem — comportamento comum em
@@ -2586,7 +2585,7 @@ fn copiar_trecho(s: &str, inicio: i64, quantidade: i64, linha: usize) -> Result<
             linha,
             format!(
                 "'copia': início {inicio} fora dos limites — \"{s}\" tem {total} caractere(s) \
-                 (seção 15 — erro de execução)"
+                 (erro de execução)"
             ),
         ));
     }
@@ -2598,7 +2597,7 @@ fn copiar_trecho(s: &str, inicio: i64, quantidade: i64, linha: usize) -> Result<
     Ok(chars[inicio_idx..fim_idx].iter().collect())
 }
 
-/// `posicao(SUB, S)` (seção 20.2) — posição (1-based) da primeira
+/// `posicao(SUB, S)` — posição (1-based) da primeira
 /// ocorrência de `sub` dentro de `texto`, ou `0` se não encontrada
 /// (convenção Pascal `Pos`, mais simples para o aluno do que `-1` ou um
 /// tipo `Option`).
@@ -2746,7 +2745,7 @@ fim"#,
 
     #[test]
     fn escreva_sem_quebra_automatica() {
-        // ✅ v0.4: 'escreva' não adiciona '\n' automaticamente.
+        // 'escreva' não adiciona '\n' automaticamente.
         let saida = executar(
             r#"programa P
 início
@@ -2780,7 +2779,7 @@ fim"#,
     #[test]
     fn escreva_ln_adiciona_quebra_de_linha_apos_todos_os_itens() {
         // 'escreva_ln A, B, C' imprime A, B, C e UMA quebra de linha ao
-        // final — não uma quebra por item (seção 6.2.2, estilo Pascal
+        // final — não uma quebra por item (estilo Pascal
         // 'writeln').
         let saida = executar(
             r#"programa P
@@ -3131,7 +3130,7 @@ fim"#,
             &[],
         );
         // Atribuir um registro a outro deve COPIAR — alterar B.X não pode
-        // afetar A.X (seção 10.5, semântica de valor para 'registro').
+        // afetar A.X (semântica de valor para 'registro').
         assert_eq!(saida, "1 99");
     }
 
@@ -3156,7 +3155,7 @@ fim"#,
     #[test]
     fn conjunto_com_limites_cardinais_zero_a_n_menos_um() {
         // Composição cardinal (0-based), estilo Pascal/BASIC — os limites
-        // não precisam começar em 1 (seção 4.5): aqui [0..4] para 5
+        // não precisam começar em 1: aqui [0..4] para 5
         // posições.
         let saida = executar(
             r#"programa P
@@ -3240,7 +3239,7 @@ fim"#,
 
     #[test]
     fn matriz_2d_totalmente_dinamica() {
-        // 'conjunto [,] de <tipo>' (questão #7 da seção 13) — ambas as
+        // 'conjunto [,] de <tipo>' — ambas as
         // dimensões são definidas só em tempo de execução, via
         // 'dimensione M[1..L, 1..C]'.
         let saida = executar(
@@ -3457,7 +3456,7 @@ fim"#,
 
     #[test]
     fn operacoes_de_string_combinadas_em_validacao() {
-        // Caso de uso típico (seção 20.2): validar se uma cadeia contém
+        // Caso de uso típico: validar se uma cadeia contém
         // uma subcadeia e extrair um trecho dela.
         let saida = executar(
             r#"programa P
@@ -3481,7 +3480,7 @@ fim"#,
     #[test]
     fn ir_para_salta_para_a_frente() {
         // (Nome do rótulo não pode ser 'FIM': é a palavra-chave 'fim' em
-        // qualquer grafia, PEPPE é case-insensitive — seção 1.3.)
+        // qualquer grafia, PEPPE é case-insensitive .)
         let saida = executar(
             r#"programa P
 início
@@ -3518,7 +3517,7 @@ fim"#,
 
     #[test]
     fn ir_para_rotulo_inalcancavel_e_erro_de_execucao() {
-        // O checker aceita (rótulo visível em toda a sub-rotina, seção 8),
+        // O checker aceita (rótulo visível em toda a sub-rotina),
         // mas o interpretador não consegue saltar PARA DENTRO de um bloco
         // 'se' a partir de fora dele (limitação documentada em
         // 'executar_bloco') — deve falhar com erro claro, não travar nem
@@ -3544,7 +3543,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Programação Orientada a Objetos (seção 10) — Fase 1: classe sem herança
+    // Programação Orientada a Objetos: classe sem herança
     // =====================================================================================
 
     #[test]
@@ -3678,8 +3677,8 @@ fim"#,
     fn objeto_e_var_compartilham_a_mesma_semantica_de_referencia() {
         // 'REFERENCIA <- OBJ2' faz REFERENCIA e OBJ2 apontarem para a
         // MESMA instância — mutar via um é visível através do outro
-        // (seção 10.4). Nome não pode ser 'REF': colide com a palavra-
-        // chave reservada 'ref' (seção 9.3, case-insensitive).
+        //. Nome não pode ser 'REF': colide com a palavra-
+        // chave reservada 'ref' (case-insensitive).
         let saida = executar(
             r#"programa P
 tipo
@@ -3708,10 +3707,10 @@ fim"#,
     #[test]
     fn heranca_simples_atribuicao_de_derivada_para_base() {
         // Núcleo de POLIFORMISMO_UNIVERSAL_INCLUSÃO (sem dispatch
-        // dinâmico ainda — Fase 4): 'REFERENCIA <- OBJ2' (Pai <- Filho)
+        // dinâmico ainda): 'REFERENCIA <- OBJ2' (Pai <- Filho)
         // deve funcionar, e os campos herdados de 'Filho' devem incluir
         // os de 'Pai'. Nome não pode ser 'REF': colide com a
-        // palavra-chave reservada 'ref' (seção 9.3, case-insensitive).
+        // palavra-chave reservada 'ref' (case-insensitive).
         let saida = executar(
             r#"programa P
 tipo
@@ -3744,7 +3743,7 @@ fim"#,
 
     #[test]
     fn virtual_sobrepor_dispatch_dinamico_via_atribuicao_de_referencia() {
-        // Núcleo de POLIFORMISMO_UNIVERSAL_INCLUSÃO (seção 10.6, exemplo
+        // Núcleo de POLIFORMISMO_UNIVERSAL_INCLUSÃO (exemplo
         // completo da especificação): 'OBJ_BASE.EXECUTA()' deve executar
         // a versão de 'Filho' depois de 'OBJ_BASE <- OBJ2' (Pai <-
         // Filho), e voltar a executar a de 'Pai' depois de 'OBJ_BASE <-
@@ -3798,7 +3797,7 @@ fim"#,
 
     #[test]
     fn sobrecarga_de_subrotina_solta_executa_a_versao_certa_por_aridade_e_tipo() {
-        // Núcleo do exemplo CALCULAR do material (seção 10.5): três
+        // Núcleo do exemplo CALCULAR do material: três
         // sobrecargas, cada chamada deve executar a versão certa.
         let saida = executar(
             r#"programa P
@@ -3948,7 +3947,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Funções como valores de primeira classe (seção 10.5.3)
+    // Funções como valores de primeira classe
     // =====================================================================================
 
     #[test]
@@ -4001,8 +4000,8 @@ fim"#,
     #[test]
     fn chamada_indireta_de_metodo_respeita_dispatch_dinamico() {
         // RESPOSTA captura ESTUDANTE.EXECUTA enquanto ESTUDANTE é, na
-        // real, uma instância de 'Filho' (Fase 4, dispatch dinâmico) —
-        // a chamada indireta deve executar a versão sobreposta, não a
+        // real, uma instância de 'Filho' (dispatch dinâmico) — a
+        // chamada indireta deve executar a versão sobreposta, não a
         // do tipo declarado da variável que originou a captura.
         let saida = executar(
             r#"programa P
@@ -4050,7 +4049,7 @@ fim"#,
     fn chamada_indireta_como_comando_solto_descarta_retorno() {
         // 'RESPOSTA()' sozinho, como comando (não dentro de uma
         // expressão) — mesma permissividade de 'OBJETO.MÉTODO()' como
-        // comando (seção 10.4): executa pelo efeito colateral, descarta
+        // comando: executa pelo efeito colateral, descarta
         // o valor de retorno.
         let saida = executar(
             r#"programa P
@@ -4076,7 +4075,7 @@ fim"#,
     }
 
     // =====================================================================================
-    // Escopo léxico no estilo Pascal — visibilidade por ordem de declaração (seção 9.6)
+    // Escopo léxico no estilo Pascal — visibilidade por ordem de declaração
     // =====================================================================================
 
     #[test]
@@ -4168,7 +4167,7 @@ fim"#,
 
     #[test]
     fn subrotina_aninhada_ve_variavel_local_da_externa_declarada_antes() {
-        // Aninhamento pleno (seção 9.6): INTERNO, declarada dentro de
+        // Aninhamento pleno: INTERNO, declarada dentro de
         // EXTERNO, vê a variável local I de EXTERNO (declarada antes de
         // INTERNO no texto), e consegue mutá-la — mudança visível de
         // volta em EXTERNO após a chamada (mesma célula compartilhada).
@@ -4230,7 +4229,7 @@ fim"#,
     #[test]
     fn literal_caractere_atribuido_a_variavel_caractere_sem_cast() {
         // 'S' (aspas simples) já é 'caractere' — atribuição direta, sem
-        // precisar de caractere(...) explícito (seção 3, diferente de um
+        // precisar de caractere(...) explícito (diferente de um
         // literal "S" entre aspas duplas, que é sempre 'cadeia').
         let saida = executar(
             r#"programa P
