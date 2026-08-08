@@ -1,21 +1,9 @@
-//! Árvore Sintática Abstrata (AST) da linguagem PEPPE — núcleo estrutural
-//! (seções 1–9 da especificação). Programação Orientada a Objetos (seção 10)
-//! fica para uma fase posterior (`ast_oop`, futuramente).
-//!
-//! Convenções:
-//! - Todo nó que pode originar uma mensagem de erro carrega `linha: usize`
-//!   (1-based), para o formato de diagnóstico da seção 15.3.
-//! - `Bloco` é simplesmente uma sequência de [`Comando`]s.
-//! - Declarações de nível superior (`const`/`tipo`/`var`/sub-rotinas) podem
-//!   aparecer intercaladas e em qualquer ordem (seção 1.1) — por isso
-//!   [`DeclaracaoTopo`] é um enum, e [`Programa`]/[`SubRotina`] guardam
-//!   `Vec<DeclaracaoTopo>`.
+//! Árvore Sintática Abstrata (AST) da linguagem PEPPE (núcleo estrutural)
 
 // =====================================================================================
 // Programa
 // =====================================================================================
 
-/// Um programa PEPPE completo: `programa <NOME> ... início ... fim` (seção 1.1).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Programa {
     pub nome: String,
@@ -25,37 +13,27 @@ pub struct Programa {
     pub bloco_principal: Bloco,
 }
 
-/// Uma declaração de nível superior — de um programa ou do corpo de uma
-/// sub-rotina (seção 9.6, sub-rotinas aninhadas).
 #[derive(Debug, Clone, PartialEq)]
 pub enum DeclaracaoTopo {
     Const(DeclaracaoConst),
     Tipo(DeclaracaoTipo),
     Var(DeclaracaoVar),
     SubRotina(SubRotina),
-    /// `função <Classe>..<MÉTODO>(...) [: tipo] ... início ... fim`, ou a
-    /// forma `procedimento` equivalente (seção 10.3, implementação
-    /// externa). A assinatura precisa corresponder a uma
-    /// `ItemClasse::AssinaturaMetodo` dentro da declaração de `<Classe>`
-    /// (validado pelo verificador semântico).
     MetodoExterno { classe: String, metodo: SubRotina },
 }
 
 // =====================================================================================
-// Declarações (seção 4)
+// Declarações 
 // =====================================================================================
 
-/// `const NOME = <literal>` (seção 4.1).
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclaracaoConst {
     pub nome: String,
-    /// Sempre um literal (seção 4.1) — `Expr::Inteiro`, `Expr::Real`,
-    /// `Expr::Texto`, `Expr::Caractere` ou `Expr::Logico`.
     pub valor: Expr,
     pub linha: usize,
 }
 
-/// `tipo NOME = <definição>` (seção 4.3/4.4/4.5).
+/// tipo NOME = <definição>
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclaracaoTipo {
     pub nome: String,
@@ -63,8 +41,8 @@ pub struct DeclaracaoTipo {
     pub linha: usize,
 }
 
-/// `var NOME1, NOME2, ... : <tipo>` (seção 4.2). Uma linha de `var` com
-/// vários nomes do mesmo tipo é representada por **uma** `DeclaracaoVar`
+/// var NOME1, NOME2, ... : <tipo>. Uma linha de `var` com
+/// vários nomes do mesmo tipo é representada por uma `DeclaracaoVar`
 /// com `nomes.len() > 1`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeclaracaoVar {
@@ -74,59 +52,26 @@ pub struct DeclaracaoVar {
 }
 
 /// Um tipo PEPPE — primitivo, alias (`tipo`), `registro` ou `conjunto`
-/// (seções 3/4.3/4.4/4.5).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tipo {
     Primitivo(TipoPrimitivo),
-    /// Tipo `generico` — polimorfismo paramétrico (seção 10.5, fase 2).
     Generico,
-    /// Referência a um tipo definido via `tipo NOME = ...` (alias, registro,
-    /// conjunto ou — fase 2 — classe). Resolvido pelo verificador semântico.
     Nomeado(String),
-    /// `registro <campos> fim_registro` (seção 4.4).
     Registro(Vec<DeclaracaoVar>),
-    /// `conjunto [<dim1>, <dim2>, ...] de <tipo>` (seção 4.5).
-    ///
-    /// Cada dimensão é `Some((inicio, fim))` para um array estático
-    /// (`[1..8]`) ou `None` para a dimensão vazia de um array dinâmico
-    /// (`conjunto [] de cadeia`, seção 4.5.1).
     Conjunto {
         dimensoes: Vec<Option<(Expr, Expr)>>,
         elemento: Box<Tipo>,
     },
-    /// `classe [herança de <ClasseBase1>[, de <ClasseBase2>, ...]]
-    /// <seções de membros> fim_classe` (seção 10.1). Herança múltipla
-    /// (Fase 6) é suportada — `heranca` é a lista de bases **diretas**,
-    /// na ordem declarada (vazia = sem herança, um elemento = herança
-    /// simples, dois ou mais = múltipla). PEPPE não tem herança virtual
-    /// (decisão do autor): se duas bases diretas compartilham, por sua
-    /// vez, uma base comum mais acima ("diamond problem"), cada caminho
-    /// de herança duplica essa base — igual C++ sem a palavra-chave
-    /// `virtual`. Colisão de nome entre bases (ou herdado por mais de
-    /// um caminho) é erro de ambiguidade ao acessar sem qualificação;
-    /// desambigua-se com `CLS_BASE..NOME` (mesmo operador `..` usado em
-    /// método externo, seção 10.3) — ver `Verificador::achatar_classe`.
     Classe {
         heranca: Vec<String>,
         membros: Vec<MembroClasse>,
     },
-    /// `função(tipo1, tipo2, ...)` (seção 10.5.3) — tipo de uma
-    /// referência a função de primeira classe. Só fixa os tipos dos
-    /// **parâmetros** (`parametros`); o tipo de retorno é livre — uma
-    /// variável deste tipo aceita qualquer função cujos parâmetros
-    /// tenham esses tipos, na ordem, com qualquer retorno. Só aceita
-    /// **funções** (sub-rotinas com retorno), nunca procedimentos —
-    /// validado pelo verificador semântico, não na própria AST.
-    /// Sempre usado através de um alias nomeado (`tipo FUNC1 =
-    /// função(inteiro)`), nunca como tipo anônimo numa declaração de
-    /// `var` — mesma convenção de `classe`/`registro`.
     Funcao {
         parametros: Vec<Tipo>,
     },
 }
 
-/// Os cinco tipos primitivos da PEPPE (seção 3), também usados como destino
-/// de *cast* (seção 10.5.1).
+/// Os cinco tipos primitivos da PEPPE.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TipoPrimitivo {
     Inteiro,
@@ -137,17 +82,17 @@ pub enum TipoPrimitivo {
 }
 
 // =====================================================================================
-// Classes (seção 10) — declaração de membros
+// Classes — declaração de membros
 // =====================================================================================
 
-/// Um membro de classe, com sua seção de visibilidade (seção 10.1/10.4).
+/// Um membro de classe.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MembroClasse {
     pub visibilidade: Visibilidade,
     pub item: ItemClasse,
 }
 
-/// `seção_pública` / `seção_protegida` / `seção_privada` (seção 10.1).
+/// `seção_pública` / `seção_protegida` / `seção_privada`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibilidade {
     Publica,
@@ -155,11 +100,6 @@ pub enum Visibilidade {
     Privada,
 }
 
-/// Modificador de dispatch de um método (seção 10.6) — `virtual` na
-/// classe-base habilita sobrescrita; `sobrepor` na classe derivada
-/// redefine um método `virtual` correspondente. `Nenhum` é o padrão
-/// (*binding* estático, resolvido pelo tipo declarado da variável, não
-/// pela classe real da instância).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Modificador {
     #[default]
@@ -169,17 +109,14 @@ pub enum Modificador {
 }
 
 /// O que pode aparecer dentro de uma seção de visibilidade de uma classe
-/// (seção 10.1).
 #[derive(Debug, Clone, PartialEq)]
 pub enum ItemClasse {
     /// Um campo de dados — `NOME1, NOME2, ... : <tipo>` (mesma forma de
     /// `var`/campo de `registro`).
     Campo(DeclaracaoVar),
-    /// Assinatura de método **sem** corpo aqui — a implementação aparece
+    /// Assinatura de método sem corpo aqui — a implementação aparece
     /// em outro lugar: como `MetodoInterno` em outra seção da mesma
-    /// classe, ou como [`DeclaracaoTopo::MetodoExterno`] fora da classe
-    /// (seção 10.3). É erro semântico se a assinatura nunca for
-    /// implementada em nenhum dos dois lugares.
+    /// classe, ou como [`DeclaracaoTopo::MetodoExterno`] fora da classe.
     AssinaturaMetodo {
         categoria: CategoriaSubRotina,
         nome: String,
@@ -188,13 +125,13 @@ pub enum ItemClasse {
         modificador: Modificador,
         linha: usize,
     },
-    /// Implementação completa de um método **dentro** da declaração da
-    /// classe (seção 10.3, forma "interna").
+    /// Implementação completa de um método dentro da declaração da
+    /// classe.
     MetodoInterno(SubRotina, Modificador),
 }
 
 // =====================================================================================
-// Sub-rotinas (seção 9)
+// Sub-rotinas 
 // =====================================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -204,11 +141,7 @@ pub enum CategoriaSubRotina {
 }
 
 /// `procedimento NOME(...) ... início ... fim` ou
-/// `função NOME(...) : <tipo> ... início ... fim` (seção 9.1/9.2).
-///
-/// Sub-rotinas aninhadas (seção 9.6) aparecem dentro de
-/// `declaracoes_locais` de sua sub-rotina "pai", como mais um
-/// [`DeclaracaoTopo::SubRotina`].
+/// `função NOME(...) : <tipo> ... início ... fim`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SubRotina {
     pub categoria: CategoriaSubRotina,
@@ -222,8 +155,8 @@ pub struct SubRotina {
     pub linha: usize,
 }
 
-/// Um grupo de parâmetros: `[var] NOME1, NOME2, ... : <tipo>` — separado de
-/// outros grupos por `;` (Padrão A, seção 9.3).
+/// Um grupo de parâmetros: `[var] NOME1, NOME2, ... : <tipo>` separado de
+/// outros grupos por `;`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Parametro {
     pub nomes: Vec<String>,
@@ -233,7 +166,7 @@ pub struct Parametro {
 }
 
 // =====================================================================================
-// Comandos (seções 6, 7, 8 e 9.7)
+// Comandos 
 // =====================================================================================
 
 pub type Bloco = Vec<Comando>;

@@ -1,8 +1,7 @@
 //! Definição dos tokens da linguagem PEPPE.
 //!
 //! Cada `Token` carrega seu `TokenKind` e a posição (linha/coluna, 1-based)
-//! onde o token começa no código-fonte — essencial para as mensagens de erro
-//! didáticas descritas na seção 15 da especificação.
+//! onde o token começa no código-fonte.
 
 use std::fmt;
 
@@ -28,14 +27,7 @@ pub enum TokenKind {
     Const,
     Tipo,
     Var,
-    /// `ref` — marca passagem por referência em um grupo de parâmetros
-    /// (seção 9.3, ✅ v0.10: substitui `referencia`/`var`, mais curto e
-    /// fácil de digitar — mesmo espírito de `<-`/`^`).
     Ref,
-    /// `vlr` — marca passagem por valor em um grupo de parâmetros (seção
-    /// 9.3, ✅ v0.10). Puramente **opcional/redundante**: omitir o
-    /// marcador já significa passagem por valor; `vlr` existe apenas para
-    /// quem preferir deixar isso explícito no código.
     Vlr,
     Objeto,
     Inicio,
@@ -78,8 +70,6 @@ pub enum TokenKind {
     // ---- Entrada/Saída (seção 6) -------------------------------------------
     Leia,
     Escreva,
-    /// `escreva_ln` (seção 6.2.2) — mesma sintaxe de `escreva`, com `\n`
-    /// automático ao final de toda a lista de itens.
     EscrevaLn,
     LeiaSeco,
     Pausa,
@@ -177,7 +167,7 @@ pub enum TokenKind {
 
 impl fmt::Display for TokenKind {
     /// Mostra cada token na grafia real da PEPPE (ex.: `início`, `então`,
-    /// `.não.`, `←`) — usado nas mensagens de erro do parser (seção 15.3),
+    /// `.não.`, `←`), usado nas mensagens de erro do parser (seção 15.3),
     /// para que "esperava 'fim_se'" seja legível por um aluno, não
     /// "esperava 'FimSe'".
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -287,8 +277,6 @@ impl fmt::Display for TokenKind {
             Barra => write!(f, "/"),
             Div => write!(f, "div"),
             Mod => write!(f, "mod"),
-            // ✅ v0.9: '^' é a forma canônica (mais fácil de digitar); '↑' é
-            // aceito como sinônimo tipográfico (seção 5.2/5.7).
             Potencia => write!(f, "^"),
 
             // Operadores lógicos
@@ -304,10 +292,6 @@ impl fmt::Display for TokenKind {
             Maior => write!(f, ">"),
             MenorIgual => write!(f, "<="),
             MaiorIgual => write!(f, ">="),
-
-            // Atribuição
-            // ✅ v0.9: '<-' é a forma canônica (mais fácil de digitar); '←'
-            // é aceito como sinônimo tipográfico (seção 5.1/5.7).
             Seta => write!(f, "<-"),
 
             // Pontuação
