@@ -56,18 +56,30 @@ jobs:
       - name: Compilar (release)
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Empacotar em .zip com nome de arquivo limpo
+      - name: Empacotar em .zip (Linux/macOS)
         # O nome do PACOTE (.zip) carrega a plataforma, para diferenciar
         # os 4 downloads na mesma página de Release. Mas o ARQUIVO dentro
-        # do zip mantém o nome original ("peppe" ou "peppe.exe") — assim,
-        # ao descompactar, o binário já fica pronto para usar junto do
+        # do zip mantém o nome original ("peppe") — assim, ao
+        # descompactar, o binário já fica pronto para usar junto do
         # ppide, sem precisar renomear nada manualmente.
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
           cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.bin }}"
           cd dist
           zip "${{ matrix.pacote }}.zip" "${{ matrix.bin }}"
+
+      - name: Empacotar em .zip (Windows)
+        # No runner Windows não dá para contar com o comando "zip" (não
+        # vem instalado por padrão) — usa o Compress-Archive nativo do
+        # PowerShell, que sempre está disponível.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.bin }}"
+          Compress-Archive -Path "dist/${{ matrix.bin }}" -DestinationPath "dist/${{ matrix.pacote }}.zip"
 
       - name: Publicar como artefato do workflow
         uses: actions/upload-artifact@v4
