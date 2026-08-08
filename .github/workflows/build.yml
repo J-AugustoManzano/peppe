@@ -24,25 +24,25 @@ jobs:
             os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin: peppe
-            saida: peppe-linux-x86_64
+            pacote: peppe-linux-x86_64
 
           - nome: Windows (x86_64)
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: peppe.exe
-            saida: peppe-windows-x86_64.exe
+            pacote: peppe-windows-x86_64
 
           - nome: macOS Intel (x86_64)
             os: macos-latest
             target: x86_64-apple-darwin
             bin: peppe
-            saida: peppe-macos-intel
+            pacote: peppe-macos-intel
 
           - nome: macOS Apple Silicon (arm64)
             os: macos-latest
             target: aarch64-apple-darwin
             bin: peppe
-            saida: peppe-macos-arm64
+            pacote: peppe-macos-arm64
 
     steps:
       - name: Baixar o código
@@ -56,20 +56,27 @@ jobs:
       - name: Compilar (release)
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Preparar o binário para envio
+      - name: Empacotar em .zip com nome de arquivo limpo
+        # O nome do PACOTE (.zip) carrega a plataforma, para diferenciar
+        # os 4 downloads na mesma página de Release. Mas o ARQUIVO dentro
+        # do zip mantém o nome original ("peppe" ou "peppe.exe") — assim,
+        # ao descompactar, o binário já fica pronto para usar junto do
+        # ppide, sem precisar renomear nada manualmente.
         shell: bash
         run: |
           mkdir -p dist
-          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.saida }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${{ matrix.bin }}"
+          cd dist
+          zip "${{ matrix.pacote }}.zip" "${{ matrix.bin }}"
 
       - name: Publicar como artefato do workflow
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.saida }}
-          path: dist/${{ matrix.saida }}
+          name: ${{ matrix.pacote }}
+          path: dist/${{ matrix.pacote }}.zip
 
   # Só roda quando o push tem uma tag "v*" (ex.: v1.0.0) — junta os 4
-  # binários já compilados acima e cria um Release no GitHub com eles
+  # pacotes já compilados acima e cria um Release no GitHub com eles
   # anexados, prontos para download.
   release:
     name: Criar Release no GitHub
@@ -79,14 +86,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Baixar todos os binários compilados
+      - name: Baixar todos os pacotes compilados
         uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Criar o Release e anexar os binários
+      - name: Criar o Release e anexar os pacotes
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**/*
+          files: dist/**/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
