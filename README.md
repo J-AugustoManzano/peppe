@@ -55,6 +55,6 @@ Augusto Manzano
 
 ## Licença
 
-Este projeto está sob a licença [MIT](LICENSE) — uso, cópia e modificação
+Este projeto está sob a licença [MIT](LICENSE). Uso, cópia e modificação
 livres, desde que o aviso de direitos autorais e a licença original sejam
 mantidos.
