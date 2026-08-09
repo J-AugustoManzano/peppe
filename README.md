@@ -5,6 +5,11 @@
 Interpretador de uma linguagem de programação em português estruturado,
 voltada para o ensino de algoritmos e lógica de programação, fundamentado sobre o livro:
 
+> **Status:** Algorimos: Lógica para Desenvolvimento de Programação Imperativa de Computadores
+> **Status:** Editora LTC
+
+Fase de andamento do prjeto>
+
 > **Status:** em fase de beta-teste (semestre 2026).
 
 ## Download
