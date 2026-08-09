@@ -27,6 +27,10 @@ instalar nada além disso.
 
 ```
 peppe caminho/para/programa.pe
+
+ou
+
+peppe programa.pe
 ```
 
 O interpretador lê o arquivo `.pe`, verifica erros de sintaxe e semântica,
