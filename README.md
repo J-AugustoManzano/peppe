@@ -38,7 +38,7 @@ e executa o programa, mostrando erros com número de linha quando houver.
 
 ## Como compilar a partir do código-fonte
 
-Requer o [Rust]([https://www.rust-lang.org/](https://rust-lang.org/pt-BR/)) instalado (`rustc`/`cargo`).
+Requer o [Rust]([https://rust-lang.org/pt-BR/) instalado (`rustc`/`cargo`).
 
 ```
 git clone https://github.com/J-AugustoManzano/peppe.git
