@@ -7,7 +7,7 @@ voltada para o ensino de algoritmos e lógica de programação, fundamentado sob
 
 ```
 Algorimos: Lógica para Desenvolvimento de Programação Imperativa de Computadores
-[Editora LTC]([https://www.rust-lang.org/](https://www.grupogen.com.br/livro-algoritmos-logica-para-desenvolvimento-de-programacao-imperativa-de-computadores-jose-augusto-manzano-jayr-figueiredo-de-oliveira-editora-ltc-9786558110071?gad_source=1&gad_campaignid=24105909988&gbraid=0AAAAADsc1Ny3OiE7W5_CnEdflbylZjrQn&gclid=CjwKCAjwyuDTBhB-EiwANCQhLLARbk2pILtwNsfb5CUpOQeoeBc7Bl9Py2l_kw7m-u4bzr3VvNWYFRoC1SEQAvD_BwE))
+Editora LTC
 ```
 
 Fase de andamento do prjeto>
