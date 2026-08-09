@@ -3,7 +3,7 @@
 **P**ortuguês **E**struturado **P**ara **P**rogramação **E**ducacional
 
 Interpretador de uma linguagem de programação em português estruturado,
-voltada para o ensino de algoritmos e lógica de programação.
+voltada para o ensino de algoritmos e lógica de programação, fundamentado sobre o livro:
 
 > **Status:** em fase de beta-teste (semestre 2026).
 
