@@ -10,7 +10,7 @@ Algorimos: Lógica para Desenvolvimento de Programação Imperativa de Computado
 Editora LTC
 ```
 
-Fase de andamento do prjeto>
+Fase de andamento do projeto:
 
 > **Status:** em fase de beta-teste (semestre 2026).
 
